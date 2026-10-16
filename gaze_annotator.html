@@ -1,0 +1,1153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gaze Annotator</title>
+<!-- SheetJS (pinned + integrity-checked). Only needed for .xlsx files; CSV works without it. -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
+        integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"
+        crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --ink: #1d2433; --muted: #667085; --line: #dde2ea;
+    --btn: #ffffff; --btn-hover: #eef2f8; --accent: #2457d6; --accent-ink: #ffffff;
+    --done: #1f9d55; --partial: #d99a00; --empty: #c3c9d4; --danger: #c0392b; --l2: #7a3fd1; --warn-bg: #fff4d6; --unsure: #0b8fd3;
+    --scroll: #c9d0db;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --ink: #e7ebf2; --muted: #98a2b3; --line: #313948;
+      --btn: #222834; --btn-hover: #2b3341; --accent: #5b8cff; --accent-ink: #0d1220;
+      --done: #3ccf7a; --partial: #f0b429; --empty: #4a5263; --danger: #ff6b5b; --l2: #b28cff; --warn-bg: #3a3020; --unsure: #38bdf8;
+      --scroll: #3a4352;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); display: flex; flex-direction: column;
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  input, select, textarea { font: inherit; color: inherit; background: var(--btn);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  kbd { font: 11px/1.3 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; opacity: .8; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .hidden { display: none !important; }
+  .ok { color: var(--done); }
+  .error { color: var(--danger); font-size: 13px; white-space: pre-line; }
+  .error:empty { display: none; }
+  .btn { background: var(--btn); border: 1px solid var(--line); border-radius: 7px; padding: 5px 11px; white-space: nowrap; }
+  .btn:hover { background: var(--btn-hover); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.danger { color: var(--danger); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* ---- header: one line ---- */
+  header { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+           background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0; white-space: nowrap; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
+  .seg button { border: 0; background: var(--btn); padding: 5px 12px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  .seg button:disabled { opacity: .45; cursor: not-allowed; }
+  #hdrProgress { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 120px; }
+  .bar { flex: 1; height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--done); width: 0; transition: width .2s; }
+  #progressText { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .spacer { flex: 1; }
+  #saved { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  #saved.warn { color: var(--danger); font-weight: 600; white-space: normal; }
+  #saved.unsaved { color: var(--partial); font-weight: 600; }
+  #saved.ok { color: var(--done); }
+
+  main { flex: 1; min-height: 0; width: 100%; max-width: 1280px; margin: 0 auto; padding: 12px 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .card h2 { font-size: 14px; margin: 0 0 8px; }
+
+  /* ---- setup: two columns ---- */
+  #viewSetup { height: 100%; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; align-items: start; overflow: auto; }
+  #viewSetup .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+  .field input, .field select { color: var(--ink); font-size: 14px; }
+  .field input[type=file] { font-size: 12.5px; padding: 3px; max-width: 100%; }
+  #viewSetup .col.fill { height: 100%; min-height: 0; }
+  .card.prompts-card { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .ptable { flex: 0 1 auto; min-height: 70px; overflow: auto; margin: 4px 0 8px; }
+  table.prompts { border-collapse: collapse; }
+  table.prompts th, table.prompts td { padding: 2px 6px 2px 0; text-align: left; }
+  table.prompts th { color: var(--muted); font-weight: 500; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+  table.prompts input { width: 104px; }
+  table.prompts input.pname { width: 64px; }
+  table.prompts td.n { min-width: 48px; }
+  .setup-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  #dictInfo div { margin-top: 2px; }
+  .card.dict-card { padding: 8px 14px; font-size: 12.5px; }
+  .dict-card summary { cursor: pointer; list-style: none; }
+  .dict-card summary::-webkit-details-marker { display: none; }
+  .dict-card .link { color: var(--accent); margin-left: 6px; }
+  .dict-card details[open] .link { display: none; }
+
+  /* ---- annotate: fills the window, only the gaze list scrolls ---- */
+  #viewAnnotate { height: 100%; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; }
+  #listWrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: auto; min-height: 0; }
+  #list { list-style: none; margin: 0; padding: 4px 0; }
+  #list li { padding: 2px 10px; cursor: pointer; display: flex; gap: 7px; align-items: center; font-size: 12.5px; }
+  #list li:hover { background: var(--btn-hover); }
+  #list li.cur { background: var(--accent); color: var(--accent-ink); }
+  #list { user-select: none; }
+  #list li.sel { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+  /* slim scroll bars that follow the light/dark theme */
+  * { scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
+  .batch-note { color: var(--accent); font-weight: 600; }
+  #list li.ph { cursor: default; font-weight: 600; color: var(--muted); padding-top: 7px; background: none;
+                position: sticky; top: 0; background: var(--panel); }
+  #list li .g { min-width: 38px; font-variant-numeric: tabular-nums; }
+  #list li .lab { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--empty); }
+  .dot.done { background: var(--done); } .dot.partial { background: var(--partial); } .dot.unsure { background: var(--unsure); }
+
+  .ann { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding-top: 10px; padding-bottom: 8px; }
+  .topbar { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; }
+  .where { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .where .prompt { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .where .gaze { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .where .muted { font-size: 12px; }
+  .status-pill { font-size: 11px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap;
+                 overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .status-pill.done { color: var(--done); border-color: var(--done); }
+  .status-pill.partial { color: var(--partial); border-color: var(--partial); }
+  .status-pill.unsure { color: var(--unsure); border-color: var(--unsure); }
+  .navbtns { flex: none; display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .navbtns input { width: 82px; }
+
+  .lv { display: grid; grid-template-columns: 138px minmax(0, 1fr); gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+  .lvname b { display: block; font-size: 13px; }
+  .lvname span { display: block; font-size: 11.5px; color: var(--muted); }
+  #secL2 .lvname b { color: var(--l2); }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; min-height: 31px; align-items: center; }
+  .tag { background: var(--btn); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; }
+  .tag:hover { background: var(--btn-hover); }
+  .tag[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .tag.gate::after { content: " \25B8"; color: var(--l2); }
+  .tag.gate[aria-pressed="true"]::after { color: inherit; }
+  .tag.unknown { border-style: dashed; border-color: var(--danger); }
+  #btnUnsure[aria-pressed="true"] { background: var(--unsure); border-color: var(--unsure); color: #ffffff; }
+  .placeholder { color: var(--muted); font-size: 12.5px; font-style: italic; }
+  /* definitions reserve two lines so the rows below never jump */
+  .def { margin-top: 4px; font-size: 12px; color: var(--muted); height: 2.8em; line-height: 1.4em; overflow: hidden;
+         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  #defL3:empty { display: none; }
+  .flagrow { display: flex; gap: 8px; align-items: stretch; }
+  .flagrow .tag { flex: none; }
+  .clearbtn { flex: none; font-size: 12.5px; padding: 4px 10px; }
+  .syncstate { font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .syncstate.good { color: var(--done); } .syncstate.bad { color: var(--partial); }
+  .clearbtn:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+  textarea#notes { flex: 1; min-width: 0; height: 52px; resize: none; }
+  .foot { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding-top: 8px; border-top: 1px solid var(--line); margin-top: auto; }
+
+  @media (max-width: 860px) {
+    header h1 { display: none; }
+    #viewAnnotate { grid-template-columns: 92px minmax(0, 1fr); }
+    #list li .lab { display: none; }
+    .lv { grid-template-columns: 1fr; gap: 4px; padding: 6px 0; }
+    .tag { padding: 3px 8px; font-size: 13px; }
+    .tags { min-height: 27px; gap: 4px; }
+    .where .gaze { font-size: 15px; }
+    .where { gap: 6px; }
+    .navbtns .btn { padding: 4px 9px; font-size: 13px; }
+    .topbar { padding-bottom: 6px; gap: 8px; }
+    #jump, #btnJump { display: none; }
+    .def { font-size: 11.5px; }
+    .lvname b, .lvname span { display: inline; margin-right: 6px; }
+  }
+  @media (max-width: 700px) {
+    #viewSetup { grid-template-columns: 1fr; grid-auto-rows: max-content; }
+    #viewSetup .col.fill { height: auto; }
+    .card.prompts-card, .ptable { flex: none; }
+  }
+  @media (max-width: 600px) {
+    #viewAnnotate { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 110px; }
+    #listWrap { order: 2; }
+    #saved { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gaze Annotator</h1>
+  <div class="seg"><button id="btnSetup">Setup</button><button id="btnAnnotate">Annotate</button></div>
+  <div id="hdrProgress"><div class="bar"><div id="barFill"></div></div><span id="progressText" class="small"></span></div>
+  <span class="spacer" id="hdrSpacer"></span>
+  <span id="saved"></span>
+  <button class="btn primary" id="btnSave" title="Save to your session file (Ctrl/Cmd+S)">Save</button>
+  <button class="btn" id="btnSaveAs" title="Save to a different file or format">Save as&hellip;</button>
+</header>
+
+<main>
+  <!-- ======================= SETUP ======================= -->
+  <div id="viewSetup">
+    <div class="col fill">
+      <div class="card">
+        <h2>Session</h2>
+        <div class="row">
+          <label class="field">Participant ID (number) <input id="recording" autocomplete="off" placeholder="e.g. 31"></label>
+          <label class="field">Session date (day of the recording) <input type="date" id="sessionDate"></label>
+        </div>
+      </div>
+      <div class="card prompts-card">
+        <h2>Prompts and gaze ranges</h2>
+        <div class="muted small">Every gaze from the first to the last number is listed in order, prompt by prompt.</div>
+        <div class="ptable">
+          <table class="prompts">
+            <thead><tr><th>Prompt #</th><th>First gaze</th><th>Last gaze</th><th>Gazes</th><th></th></tr></thead>
+            <tbody id="promptBody"></tbody>
+          </table>
+        </div>
+        <div class="row" style="align-items:center">
+          <button class="btn" id="btnAddPrompt">+ Add prompt</button>
+          <span class="muted small" id="promptTotal"></span>
+        </div>
+        <div id="setupErr" class="error" style="margin-top:8px"></div>
+        <div class="setup-foot">
+          <button class="btn primary" id="btnStart">Start annotating &rarr;</button>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>Resume previous work</h2>
+        <div class="muted small">Open the session file you saved last time. Your next saves go back into the same file.</div>
+        <div style="margin-top:8px"><button class="btn" id="btnOpen">Open saved session&hellip;</button>
+          <input type="file" id="fileImport" accept=".csv,.xlsx,.xls" class="hidden"></div>
+        <div id="importMsg" class="small" style="margin-top:6px"></div>
+        <div style="margin-top:10px"><button class="btn danger" id="btnClear">Clear session (start over)</button></div>
+      </div>
+      <div class="card dict-card">
+        <details id="dictMore">
+          <summary><span class="muted">Tag dictionary:</span> <span id="dictSummary"></span> <span class="link">Change&hellip;</span></summary>
+          <div class="row" style="margin-top:8px">
+            <label class="field">Dictionary <select id="dictSheet"></select></label>
+            <label class="field">Load an updated workbook (only if tags change) <input type="file" id="fileDict" accept=".xlsx,.xls,.csv"></label>
+          </div>
+          <div id="dictInfo" class="small muted" style="margin-top:6px"></div>
+        </details>
+        <div id="dictErr" class="error" style="margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= ANNOTATE ======================= -->
+  <div id="viewAnnotate" class="hidden">
+    <div id="listWrap"><ul id="list"></ul></div>
+    <div class="card ann">
+      <div class="topbar">
+        <div class="where">
+          <span class="prompt" id="curPrompt"></span>
+          <span class="gaze" id="curGaze"></span>
+          <span class="muted small" id="curPos"></span>
+          <span class="status-pill" id="curStatus"></span>
+        </div>
+        <div class="navbtns hidden" id="batchBtns">
+          <button class="btn" id="btnUndo" title="Undo the last change to the selected gazes">Undo</button>
+          <button class="btn primary" id="btnDone" title="Finish and go to the gaze after the selection (Esc)">Done <kbd>Esc</kbd></button>
+        </div>
+        <div class="navbtns" id="navMain">
+          <button class="btn" id="btnPrev" title="Previous gaze (&larr; or A)">&larr; Prev</button>
+          <button class="btn primary" id="btnNext" title="Next gaze (&rarr; or D)">Next &rarr;</button>
+          <button class="btn" id="btnNextTodo">Next incomplete</button>
+          <input type="number" id="jump" placeholder="Gaze #" title="Go to gaze number">
+          <button class="btn" id="btnJump">Go</button>
+        </div>
+      </div>
+
+      <div class="lv" id="secL1">
+        <div class="lvname"><b id="nameL1">L1</b><span>pick one</span></div>
+        <div><div class="tags" id="tagsL1"></div><div class="def" id="defL1"></div></div>
+      </div>
+      <div class="lv" id="secL2">
+        <div class="lvname"><b id="nameL2">L2</b><span>device tags (&#9656;) only</span></div>
+        <div><div class="tags" id="tagsL2"></div><div class="def" id="defL2"></div></div>
+      </div>
+      <div class="lv" id="secL3">
+        <div class="lvname"><b id="nameL3">L3</b><span id="hintL3">optional &middot; carries over within a prompt</span></div>
+        <div><div class="tags" id="tagsL3"></div><div class="def" id="defL3"></div></div>
+      </div>
+      <div class="lv">
+        <div class="lvname"><b>Unsure &amp; notes</b><span>optional</span></div>
+        <div class="flagrow">
+          <button type="button" class="tag" id="btnUnsure" aria-pressed="false" title="Flag if you are not confident in this gaze's codes (U)">Unsure <kbd>U</kbd></button>
+          <textarea id="notes" placeholder="Notes / feedback on this gaze (optional)"></textarea>
+          <button type="button" class="btn clearbtn" id="btnClearGaze" title="Remove all codes and the note from this gaze">Clear gaze</button>
+        </div>
+      </div>
+
+      <div class="foot small muted">
+        <label><input type="checkbox" id="autoAdvance"> Auto-advance when a gaze is complete</label>
+        <label title="Turn on when coding L3 (e.g. in a second round): progress and Next incomplete then also count gazes missing L3"><input type="checkbox" id="requireL3"> Require L3</label>
+        <label id="syncWrap" class="hidden" title="Moves Pupil Cloud's Manual Mapper to the same fixation as the gaze you are coding (needs the Pupil sync extension and a Pupil Cloud tab with the Manual Mapper open)"><input type="checkbox" id="syncPupil"> Sync Pupil</label>
+        <span id="syncState" class="syncstate"></span>
+        <span class="spacer"></span>
+        <span title="Shortcuts are off while you type in Notes"><kbd>A</kbd>/<kbd>D</kbd> or <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> move &middot; <kbd>U</kbd> unsure &middot; <kbd>Ctrl/&#8984;+S</kbd> save &middot; drag in list = several gazes</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  const LS_KEY = 'gazeAnnotator.v1';
+  // Export template (fixed column names)
+  const COLS = { 1: 'L1_Gaze_Location', 2: 'L2_Gaze_Location', 3: 'L3_Gaze_Context' };
+  // <built-in-dictionary>  (tools/build.py --lab replaces this block with private/dictionary.json)
+  // A small made-up EXAMPLE dictionary so the app works out of the box. Load your own dictionary
+  // workbook in Setup (Tag dictionary > Change...), or bake yours in with tools/build.py --lab.
+  const BUILTIN_DICT = {
+    name: 'Built-in: example tags',
+    source: 'a made-up example; load your own dictionary workbook to replace it',
+    summary: 'built-in example tags',
+    filePrefix: 'STUDY',   // study code at the start of file names; a lab sets its own in private/dictionary.json
+    L1: { name: 'L1_Gaze_Location', items: [
+      { label: 'Off', def: 'Gaze is not on any of the targets below.' },
+      { label: 'Screen', def: 'Gaze is on the main presentation or projection screen.' },
+      { label: 'Person-Instructor', def: 'Gaze is on the person leading the session.' },
+      { label: 'Person-Peer', def: 'Gaze is on another participant.' },
+      { label: 'Device-Laptop', def: 'Gaze is on a laptop (screen or keyboard).' },
+      { label: 'Device-Phone', def: 'Gaze is on a phone.' },
+      { label: 'Device-Paper', def: 'Gaze is on paper or other writing material.' },
+      { label: 'Unclear', def: 'The target cannot be determined.' },
+      { label: 'Glasses off', def: 'The eye tracker is not being worn.' } ] },
+    L2: { name: 'L2_Device_Activity', items: [
+      { label: 'On-task', def: 'Using the device for the task at hand.' },
+      { label: 'Off-task', def: 'Using the device for something unrelated to the task.' },
+      { label: "Can't tell", def: 'What the participant is doing on the device is not visible.' } ] },
+    L3: { name: 'L3_Gaze_Context', isDefault: true, items: [
+      { label: 'Whole group', def: '' }, { label: 'Small group', def: '' }, { label: 'Individual work', def: '' } ] }
+  };
+  // </built-in-dictionary>
+  const BUILTIN_NAME = BUILTIN_DICT.name;
+  const BUILTIN = { L1: BUILTIN_DICT.L1, L2: BUILTIN_DICT.L2, L3: BUILTIN_DICT.L3 };
+  const DEFAULT_L3 = BUILTIN.L3;   // used when a loaded workbook has no L3 rows
+  const MAX_ROWS = 50000;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- state ----------
+  let storageOk = true;
+  let S = load() || {
+    dictSheets: null, dictSheet: BUILTIN_NAME, dictFile: '',
+    rater: '', recording: '',
+    prompts: [{ name: '1', from: '', to: '' }],
+    rows: [], idx: 0, autoAdvance: false
+  };
+  // the built-in dictionary is always available (and always the current version); a built-in one
+  // saved by a different build (e.g. the public example vs a lab build) is dropped, never reused
+  for (const k of Object.keys(S.dictSheets || {})) if (k.startsWith('Built-in') && k !== BUILTIN_NAME) delete S.dictSheets[k];
+  S.dictSheets = Object.assign({ [BUILTIN_NAME]: BUILTIN }, S.dictSheets || {});
+  S.dictSheets[BUILTIN_NAME] = BUILTIN;
+  if (!S.dictSheets[S.dictSheet]) S.dictSheet = BUILTIN_NAME;
+
+  function load() {
+    try { const t = localStorage.getItem(LS_KEY); return t ? JSON.parse(t) : null; }
+    catch (e) { storageOk = false; return null; }
+  }
+  let saveTimer = null;
+  // browser copy = crash safety net; the session file (Save) is what raters keep and hand in
+  function save() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(S)); storageOk = true; }
+    catch (e) { storageOk = false; }
+    renderFileStatus();
+  }
+  function renderFileStatus() {
+    const el = $('saved'); el.title = '';
+    if (!storageOk) { el.textContent = 'No browser backup - press Save often!'; el.className = 'warn'; return; }
+    if (!S.rows.length) { el.textContent = ''; el.className = ''; return; }
+    const name = (fileHandle && fileHandle.name) || S.lastFile || '';
+    if (!name) { el.textContent = 'Not saved to a file yet'; el.className = 'unsaved'; return; }
+    el.textContent = S.dirty ? 'Unsaved changes' : 'Saved ' + new Date(S.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    el.className = S.dirty ? 'unsaved' : 'ok';
+    el.title = 'Session file: ' + name;
+  }
+  function markDirty() { if (!S.dirty) { S.dirty = true; renderFileStatus(); } }
+  function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(save, 300); }
+
+  // ---------- dictionary ----------
+  const dict = () => (S.dictSheets && S.dictSheets[S.dictSheet]) || null;
+  const lvl = (n) => { const d = dict(); return d ? d['L' + n] : null; };
+  const needsL2 = (l1) => !!l1 && /device/i.test(l1) && !!lvl(2) && lvl(2).items.length > 0;
+  const colName = (n) => COLS[n];
+  // prompts are numbers ("1", "2", ...); accept "Prompt 3" from older files
+  const promptNum = (v) => { const t = String(v == null ? '' : v).trim(); const m = t.match(/^(?:prompt)?\s*#?\s*(\d+)$/i); return m ? String(Number(m[1])) : t; };
+  const promptLabel = (p) => (/^\d+$/.test(p) ? 'Prompt ' + p : p);
+  S.prompts.forEach((p) => { p.name = promptNum(p.name); });
+  S.rows.forEach((r) => { r.p = promptNum(r.p); });
+
+  // Each sheet row whose first cell looks like "L1_xxx", "L2_xxx", "L3_xxx" is a tag:
+  // column A = level, B = tag label, C.. = definition / guidance.
+  function parseDictionary(sheets) {
+    const out = {};
+    for (const sh of sheets) {
+      const levels = {};
+      for (const r of sh.rows) {
+        const a = String(r[0] == null ? '' : r[0]).trim();
+        const m = a.match(/^L([123])[_\s-]/i);
+        if (!m) continue;
+        const label = String(r[1] == null ? '' : r[1]).trim();
+        if (!label) continue;
+        const key = 'L' + m[1];
+        const L = levels[key] || (levels[key] = { name: a, items: [] });
+        if (L.items.some((it) => it.label === label)) continue;
+        const def = r.slice(2).map((c) => String(c == null ? '' : c).trim()).filter(Boolean).join('  |  ');
+        L.items.push({ label, def });
+      }
+      if (levels.L1 && levels.L1.items.length) {
+        if (!levels.L3) levels.L3 = DEFAULT_L3;
+        out[sh.name] = levels;
+      }
+    }
+    return out;
+  }
+
+  // ---------- reading files ----------
+  function parseCsv(text) {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+        else f += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(f); rows.push(row); row = []; f = '';
+      } else f += c;
+    }
+    if (f !== '' || row.length) { row.push(f); rows.push(row); }
+    return rows;
+  }
+  async function readTable(file) {
+    // CSV uses our own parser so values stay as text (SheetJS would turn timestamps into date numbers)
+    if (/\.csv$/i.test(file.name)) {
+      const text = (await file.text()).replace(/^﻿/, '');
+      return [{ name: file.name, rows: parseCsv(text) }];
+    }
+    if (!window.XLSX) throw new Error('The Excel reader (SheetJS) could not be loaded - check the internet connection, or use a .csv file.');
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    return wb.SheetNames.map((n) => ({
+      name: n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: true })
+    }));
+  }
+
+  // ---------- rows ----------
+  const keyOf = (r) => r.p + '|' + r.g;
+  function statusOf(r) {
+    // an L3 carried over on its own doesn't count as starting the gaze
+    if (!r.l1 && !r.l2 && !r.notes && !r.u) return 'empty';
+    if (r.u) return 'unsure';   // flagged Unsure = finished for now (counts as complete, shown in blue)
+    // L3 is optional unless "Require L3" is on (it may be coded in a second round)
+    const ok = r.l1 && (!needsL2(r.l1) || r.l2) && (!S.requireL3 || r.l3);
+    return ok ? 'done' : 'partial';
+  }
+  const isDone = (r) => { const st = statusOf(r); return st === 'done' || st === 'unsure'; };
+  const cur = () => S.rows[S.idx];
+
+  // ---------- setup view ----------
+  function renderDictInfo() {
+    const sel = $('dictSheet'); sel.textContent = '';
+    const names = S.dictSheets ? Object.keys(S.dictSheets) : [];
+    for (const n of names) { const o = document.createElement('option'); o.value = o.textContent = n; sel.appendChild(o); }
+    sel.value = S.dictSheet; sel.disabled = names.length < 2;
+    const info = $('dictInfo'); info.textContent = '';
+    const d = dict();
+    if (!d) { $('dictSummary').textContent = 'none loaded'; return; }
+    $('dictSummary').textContent = (d === BUILTIN ? BUILTIN_DICT.summary : S.dictFile + ' / ' + S.dictSheet) +
+      ' (' + [1, 2, 3].map((n) => (lvl(n) ? lvl(n).items.length : 0) + ' L' + n).join(', ') + ' tags)';
+    const lines = [
+      d === BUILTIN ? 'Using the built-in dictionary (' + BUILTIN_DICT.source + ')'
+                    : 'Using "' + S.dictFile + '", sheet "' + S.dictSheet + '"',
+      colName(1) + ': ' + lvl(1).items.length + ' tags',
+      lvl(2) ? colName(2) + ': ' + lvl(2).items.length + ' tags (shown only when the L1 tag contains "Device")' : 'No L2 tags in this sheet',
+      colName(3) + ': ' + lvl(3).items.map((i) => i.label).join(', ') +
+        (lvl(3).isDefault ? '  (default list; add L3_ rows to the workbook to change it)' : '')
+    ];
+    lines.slice(1).forEach((t) => { const div = document.createElement('div'); div.textContent = t; info.appendChild(div); });
+  }
+
+  function renderPrompts() {
+    const body = $('promptBody'); body.textContent = '';
+    S.prompts.forEach((p, i) => {
+      const tr = document.createElement('tr');
+      const mk = (prop, cls, type) => {
+        const td = document.createElement('td'); const inp = document.createElement('input');
+        inp.type = type; inp.value = p[prop]; if (cls) inp.className = cls;
+        inp.addEventListener('input', () => { p[prop] = type === 'number' ? inp.value : inp.value; updateCount(); saveSoon(); });
+        td.appendChild(inp); tr.appendChild(td); return inp;
+      };
+      mk('name', 'pname', 'number'); mk('from', '', 'number'); mk('to', '', 'number');
+      const tdN = document.createElement('td'); tdN.className = 'muted small'; tr.appendChild(tdN);
+      const tdX = document.createElement('td'); const x = document.createElement('button');
+      x.className = 'btn small'; x.textContent = 'Remove'; x.disabled = S.prompts.length < 2;
+      x.addEventListener('click', () => { S.prompts.splice(i, 1); renderPrompts(); saveSoon(); });
+      tdX.appendChild(x); tr.appendChild(tdX);
+      const updateCount = () => {
+        const a = parseInt(p.from, 10), b = parseInt(p.to, 10);
+        tdN.textContent = (Number.isFinite(a) && Number.isFinite(b) && b >= a) ? String(b - a + 1) : '';
+        updateTotal();
+      };
+      updateCount();
+      body.appendChild(tr);
+    });
+    updateTotal();
+  }
+  function updateTotal() {
+    let n = 0;
+    for (const p of S.prompts) { const a = parseInt(p.from, 10), b = parseInt(p.to, 10); if (b >= a) n += b - a + 1; }
+    $('promptTotal').textContent = n ? n + ' gazes in total' : '';
+  }
+
+  function buildRowsFromPrompts() {
+    const errs = []; const names = new Set(); const rows = [];
+    S.prompts.forEach((p, i) => {
+      const name = promptNum(p.name); const a = Number(p.from), b = Number(p.to);
+      const tag = 'Prompt row ' + (i + 1) + ': ';
+      if (!/^\d+$/.test(name) || name === '0') errs.push(tag + 'enter the prompt number (1, 2, 3, ...).');
+      else if (names.has(name)) errs.push(tag + 'prompt ' + name + ' is listed twice.');
+      names.add(name);
+      if (p.from === '' || p.to === '' || !Number.isInteger(a) || !Number.isInteger(b)) errs.push(tag + 'enter whole numbers for first and last gaze.');
+      else if (b < a) errs.push(tag + 'last gaze must be greater than or equal to first gaze.');
+      else for (let g = a; g <= b && rows.length <= MAX_ROWS; g++) rows.push({ p: name, g });
+    });
+    if (rows.length > MAX_ROWS) errs.push('Too many gazes (over ' + MAX_ROWS + '). Check the ranges.');
+    return { errs, rows };
+  }
+
+  async function startAnnotating() {
+    $('setupErr').textContent = '';
+    if (!dict()) { $('setupErr').textContent = 'Load the tag dictionary first.'; return; }
+    if (!String(S.recording || '').trim()) { $('setupErr').textContent = 'Enter the participant ID.'; return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(S.sessionDate || '')) { $('setupErr').textContent = 'Enter the session date (the day the session was recorded, not today).'; return; }
+    const { errs, rows } = buildRowsFromPrompts();
+    if (errs.length) { $('setupErr').textContent = errs.join('\n'); return; }
+    // keep existing annotations for (prompt, gaze) pairs that still exist
+    const old = new Map(S.rows.map((r) => [keyOf(r), r]));
+    const curKey = cur() ? keyOf(cur()) : null;
+    const merged = rows.map((r) => old.get(keyOf(r)) || { p: r.p, g: r.g, l1: '', l2: '', l3: '', u: false, notes: '', t: '' });
+    const keep = new Set(merged.map(keyOf));
+    const lost = S.rows.filter((r) => !keep.has(keyOf(r)) && statusOf(r) !== 'empty').length;
+    if (lost && !confirm(lost + ' annotated gaze(s) are outside the new ranges and will be removed. Continue?')) return;
+    const changed = merged.length !== S.rows.length || merged.some((r, i) => keyOf(r) !== keyOf(S.rows[i]));
+    S.rows = merged;
+    const ci = curKey ? merged.findIndex((r) => keyOf(r) === curKey) : -1;
+    S.idx = ci >= 0 ? ci : 0;
+    if (changed) S.dirty = true;
+    save(); renderList(); show('annotate');
+    // first start of a session: ask where the session file should be saved
+    if (canPickFile && !fileHandle) await saveSession(false);
+  }
+
+  // ---------- import (resume / gaze sheet) ----------
+  // timestamps may come back as Excel date serials if the export was re-saved in Excel
+  const toIso = (v) => (typeof v === 'number' && v > 20000 && v < 80000)
+    ? new Date(Math.round((v - 25569) * 86400000)).toISOString() : String(v == null ? '' : v).trim();
+  const norm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  // one sheet (or CSV) -> { id, prompts, rows, dup }, or null when it has no Gaze column / no gazes
+  function parseSheet(rowsIn) {
+      let h = -1, col = {};
+      for (let i = 0; i < Math.min(rowsIn.length, 20) && h < 0; i++) {
+        const hdr = rowsIn[i].map(norm);
+        const gi = hdr.findIndex((c) => ['gaze', 'gazenumber', 'gazeno', 'gazenum', 'gazeid'].includes(c));
+        if (gi >= 0) {
+          h = i; col.g = gi;
+          col.p = hdr.findIndex((c) => c === 'prompt' || c === 'promptname' || c === 'promptnumber');
+          col.l1 = hdr.findIndex((c) => /^l1/.test(c)); col.l2 = hdr.findIndex((c) => /^l2/.test(c));
+          col.l3 = hdr.findIndex((c) => /^l3/.test(c)); col.n = hdr.findIndex((c) => c === 'notes' || c === 'note');
+          col.rec = hdr.findIndex((c) => c === 'participantid' || c === 'participant' || c === 'recording');
+          col.t = hdr.findIndex((c) => c === 'lastedited');
+          col.u = hdr.findIndex((c) => /^unsure/.test(c));
+        }
+      }
+      if (h < 0) return null;
+      const get = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : '');
+      const rows = []; const seen = new Set(); let dup = 0;
+      for (const r of rowsIn.slice(h + 1)) {
+        const gs = get(r, col.g); if (gs === '') continue;
+        const g = Number(gs); if (!Number.isFinite(g)) continue;
+        const row = { p: promptNum(get(r, col.p)) || '1', g, l1: get(r, col.l1), l2: get(r, col.l2), l3: get(r, col.l3),
+          u: /^(y|yes|true|1)$/i.test(get(r, col.u)), notes: get(r, col.n), t: toIso(col.t >= 0 ? r[col.t] : '') };
+        if (seen.has(keyOf(row))) { dup++; continue; }
+        seen.add(keyOf(row)); rows.push(row);
+      }
+      if (!rows.length) return null;
+      const prompts = [];
+      for (const r of rows) {
+        let p = prompts.find((x) => x.name === r.p);
+        if (!p) prompts.push(p = { name: r.p, from: r.g, to: r.g });
+        p.from = Math.min(p.from, r.g); p.to = Math.max(p.to, r.g);
+      }
+      return { id: get(rowsIn[h + 1] || [], col.rec), prompts, rows, dup };
+  }
+  // returns true (one participant, file can be saved back into), 'multi' (picked from a combined workbook) or false
+  async function importFile(file) {
+    const msg = $('importMsg'); msg.textContent = ''; msg.className = 'small';
+    try {
+      const found = [];
+      for (const sh of await readTable(file)) {
+        const pt = parseSheet(sh.rows); if (!pt) continue;
+        if (!pt.id && !/\.csv$/i.test(file.name)) pt.id = sh.name;   // fall back to the tab name
+        found.push(pt);
+      }
+      if (!found.length) throw new Error('No Gaze_Number column with gaze numbers was found.');
+      let pt = found[0];
+      if (found.length > 1) {   // a combined workbook: open one participant from it
+        const ids = found.map((x) => x.id || '(no ID)');
+        const ans = prompt('This file has ' + found.length + ' participants (' + ids.join(', ') + ').\nType the participant ID to open:', ids[0]);
+        if (ans == null) return false;
+        pt = found.find((x) => String(x.id).toLowerCase() === ans.trim().toLowerCase());
+        if (!pt) throw new Error('participant "' + ans.trim() + '" is not in this file.');
+      }
+      const { rows, prompts, dup } = pt;
+      const annotatedNow = S.rows.filter((r) => statusOf(r) !== 'empty').length;
+      if (annotatedNow && !confirm('This replaces the current session (' + annotatedNow + ' annotated gazes)' +
+        (S.dirty ? ', which has UNSAVED changes' : '') + '. Continue?')) return false;
+      const known = (n, v) => !v || (lvl(n) && lvl(n).items.some((it) => it.label === v));
+      const unknown = rows.filter((r) => !known(1, r.l1) || !known(2, r.l2) || !known(3, r.l3)).length;
+      S.rows = rows; S.prompts = prompts; S.idx = 0;
+      if (pt.id) S.recording = pt.id;   // the file replaces the session, so take its participant
+      // session date from the file name: a full date if present, else <study code>_<MM-DD>_...; the year
+      // comes from two digits ending the study code (e.g. ...26 -> 2026), else from when the file was last saved
+      const full = file.name.match(/(\d{4}-\d{2}-\d{2})/), md = file.name.match(/^(.*?)_(\d{2}-\d{2})_/);
+      if (full) S.sessionDate = full[1];
+      else if (md) {
+        const yy = md[1].match(/(\d{2})$/);
+        S.sessionDate = (yy ? '20' + yy[1] : String(new Date(file.lastModified || Date.now()).getFullYear())) + '-' + md[2];
+      }
+      fileHandle = null; rememberHandle(null);
+      S.dirty = false; S.lastFile = found.length > 1 ? '' : file.name; S.savedAt = new Date().toISOString();
+      save(); renderAll();
+      const done = rows.filter(isDone).length;
+      msg.className = 'small ok';
+      msg.textContent = 'Loaded ' + (S.recording ? S.recording + ': ' : '') + rows.length + ' gazes (' + done + ' already complete) from "' + file.name + '".' +
+        (found.length > 1 ? ' Save will ask for a new file, so the combined workbook is not overwritten.' : '') +
+        (dup ? ' Skipped ' + dup + ' duplicate rows.' : '') +
+        (unknown ? ' Warning: ' + unknown + ' rows use tags that are not in the current dictionary.' : '');
+      return found.length > 1 ? 'multi' : true;
+    } catch (e) {
+      msg.className = 'error'; msg.textContent = 'Could not load: ' + e.message;
+      return false;
+    }
+  }
+
+  // ---------- annotate view ----------
+  let listItems = [];
+  function renderList() {
+    const ul = $('list'); ul.textContent = ''; listItems = [];
+    let lastP = null;
+    S.rows.forEach((r, i) => {
+      if (r.p !== lastP) {
+        const ph = document.createElement('li'); ph.className = 'ph'; ph.textContent = promptLabel(r.p); ul.appendChild(ph); lastP = r.p;
+      }
+      const li = document.createElement('li'); li.dataset.i = i;
+      const dot = document.createElement('span'); dot.className = 'dot';
+      const g = document.createElement('span'); g.className = 'g'; g.textContent = r.g;
+      const lab = document.createElement('span'); lab.className = 'lab';
+      li.append(dot, g, lab); ul.appendChild(li); listItems[i] = li;
+      updateListItem(i);
+    });
+  }
+  function updateListItem(i) {
+    const li = listItems[i], r = S.rows[i]; if (!li || !r) return;
+    li.firstChild.className = 'dot ' + statusOf(r);
+    li.lastChild.textContent = (r.u ? '? ' : '') + [r.l1, r.l2].filter(Boolean).join(' / ');
+    li.classList.toggle('cur', !sel && i === S.idx);
+    li.classList.toggle('sel', !!sel && i >= sel.a && i <= sel.b);
+  }
+  let dragFrom = null, dragMoved = false, anchor = null;
+  $('list').addEventListener('mousedown', (e) => {
+    const li = e.target.closest('li[data-i]'); if (!li || e.button !== 0) return;
+    e.preventDefault();
+    const i = Number(li.dataset.i);
+    if (e.shiftKey) { if (!sel) anchor = S.idx; setSel(anchor, i); return; }
+    dragFrom = anchor = i; dragMoved = false;
+  });
+  $('list').addEventListener('mouseover', (e) => {
+    if (dragFrom === null) return;
+    const li = e.target.closest('li[data-i]'); if (!li) return;
+    const i = Number(li.dataset.i);
+    if (i !== dragFrom || dragMoved) { dragMoved = true; setSel(dragFrom, i); }
+  });
+  $('listWrap').addEventListener('mousemove', (e) => {   // keep scrolling while dragging near the list's edges
+    if (dragFrom === null) return;
+    const box = $('listWrap').getBoundingClientRect();
+    if (e.clientY < box.top + 28) $('listWrap').scrollTop -= 16;
+    else if (e.clientY > box.bottom - 28) $('listWrap').scrollTop += 16;
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragFrom === null) return;
+    const i = dragFrom; dragFrom = null;
+    if (!dragMoved) go(i);   // a plain click opens that gaze
+  });
+
+  // ---------- several gazes at once ----------
+  let sel = null;    // { a, b }: inclusive row range while several gazes are selected
+  let undo = null;   // copies of the selected rows from before the last bulk change
+  const selRows = () => (sel ? S.rows.slice(sel.a, sel.b + 1) : []);
+  const common = (field) => { const v = selRows().map((r) => r[field] || ''); return v.every((x) => x === v[0]) ? v[0] : null; };
+  function setSel(i, j) {
+    const a = Math.min(i, j), b = Math.max(i, j);
+    if (a === b) { go(a); return; }
+    clearTimeout(advanceTimer);
+    if (document.activeElement === $('notes')) $('notes').blur();
+    const old = sel, wasIdx = S.idx; sel = { a, b }; undo = null; S.idx = b;
+    refreshRange(old); updateListItem(wasIdx); renderCurrent();
+  }
+  function refreshRange(old) {
+    const lo = Math.min(old ? old.a : Infinity, sel ? sel.a : Infinity, S.idx), hi = Math.max(old ? old.b : -1, sel ? sel.b : -1, S.idx);
+    for (let k = lo; k <= hi; k++) updateListItem(k);
+  }
+  function dropSel() { if (!sel) return; const old = sel; sel = null; undo = null; refreshRange(old); }
+  function snapshot() { undo = { a: sel.a, rows: selRows().map((r) => Object.assign({}, r)) }; $('btnUndo').disabled = false; }
+  function bulkChanged() {
+    S.dirty = true; save();
+    for (let k = sel.a; k <= sel.b; k++) updateListItem(k);
+    renderCurrent(); renderProgress();
+  }
+  function bulkPick(field, value) {
+    snapshot();
+    const on = common(field) !== value, now = new Date().toISOString();   // the tag all of them already have toggles off
+    selRows().forEach((r) => {
+      if (field === 'l2' && !needsL2(r.l1)) return;
+      r[field] = on ? value : ''; r.t = now;
+      if (field === 'l1' && !needsL2(r.l1)) r.l2 = '';
+    });
+    bulkChanged();
+  }
+  function bulkUnsure() {
+    snapshot();
+    const all = selRows().every((r) => r.u), now = new Date().toISOString();
+    selRows().forEach((r) => { r.u = !all; r.t = now; });
+    bulkChanged();
+  }
+  function undoBulk() {
+    if (!undo || !sel) return;
+    undo.rows.forEach((r, k) => { S.rows[undo.a + k] = r; });
+    undo = null; bulkChanged();
+  }
+  function finishSel() {
+    if (!sel) return;
+    const b = sel.b; dropSel(); go(Math.min(b + 1, S.rows.length - 1), true);
+  }
+  function renderBulk() {
+    const rows = selRows(), n = rows.length, first = rows[0], last = rows[n - 1];
+    $('curPrompt').textContent = n + ' selected';
+    $('curPrompt').classList.add('batch-note');
+    $('curGaze').textContent = first.p === last.p ? promptLabel(first.p) + ' · ' + first.g + '–' + last.g
+      : promptLabel(first.p) + ' ' + first.g + ' – ' + promptLabel(last.p) + ' ' + last.g;
+    const coded = rows.filter((r) => statusOf(r) !== 'empty').length, done = rows.filter(isDone).length;
+    $('curPos').textContent = '';
+    $('curPrompt').parentNode.title = n + ' gazes selected (' + coded + ' already coded). Codes you pick now go to all of them.';
+    const pill = $('curStatus'); pill.className = 'status-pill ' + (done === n ? 'done' : done ? 'partial' : '');
+    pill.textContent = done + '/' + n + ' complete';
+    const mixed = 'Mixed in this selection - picking a tag sets it on all ' + n + ' gazes.';
+    const c1 = common('l1'); renderTags(1, c1 || '', (v) => pick('l1', v)); if (c1 === null) $('defL1').textContent = mixed;
+    if (rows.every((r) => needsL2(r.l1))) {
+      const c2 = common('l2'); renderTags(2, c2 || '', (v) => pick('l2', v)); if (c2 === null) $('defL2').textContent = mixed;
+    } else {
+      const ph = document.createElement('span'); ph.className = 'placeholder';
+      ph.textContent = rows.some((r) => needsL2(r.l1))
+        ? 'Only some selected gazes have a device L1 - give them all the same device L1 first, or set L2 one gaze at a time.'
+        : 'Pick an L1 device tag (▸) to code device activity.';
+      $('tagsL2').replaceChildren(ph); $('defL2').textContent = '';
+    }
+    const c3 = common('l3'); renderTags(3, c3 || '', (v) => pick('l3', v)); if (c3 === null) $('defL3').textContent = mixed;
+    $('btnUnsure').setAttribute('aria-pressed', String(rows.every((r) => r.u)));
+    const cn = common('notes');
+    if (document.activeElement !== $('notes')) $('notes').value = cn || '';
+    $('notes').placeholder = cn === null ? 'Mixed notes - typing here replaces the notes on all ' + n + ' gazes'
+      : 'Notes for all ' + n + ' selected gazes (optional)';
+    $('btnUndo').disabled = !undo;
+    $('btnClearGaze').textContent = 'Clear selected'; $('btnClearGaze').title = 'Remove all codes and notes from the ' + n + ' selected gazes (Undo brings them back)';
+    $('btnClearGaze').disabled = !rows.some((r) => r.l1 || r.l2 || r.l3 || r.u || r.notes);
+  }
+
+  function renderTags(n, selected, onPick) {
+    const box = $('tagsL' + n); box.textContent = '';
+    const L = lvl(n); const items = L ? L.items.slice() : [];
+    if (selected && !items.some((it) => it.label === selected)) items.push({ label: selected, def: 'Not in the current dictionary', unknown: true });
+    for (const it of items) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'tag';
+      if (n === 1 && needsL2(it.label)) b.classList.add('gate');
+      if (it.unknown) b.classList.add('unknown');
+      b.textContent = it.label; b.title = it.def || '';
+      b.setAttribute('aria-pressed', String(it.label === selected));
+      b.addEventListener('click', () => onPick(it.label));
+      box.appendChild(b);
+    }
+    const sel = items.find((it) => it.label === selected);
+    $('defL' + n).textContent = sel ? (sel.def || '') : '';
+    $('defL' + n).title = sel ? (sel.def || '') : '';
+  }
+
+  function renderCurrent() {
+    $('navMain').classList.toggle('hidden', !!sel); $('batchBtns').classList.toggle('hidden', !sel);
+    if (sel) { renderBulk(); return; }
+    $('curPrompt').classList.remove('batch-note');
+    $('notes').placeholder = 'Notes / feedback on this gaze (optional)';
+    const r = cur(); if (!r) return;
+    $('curPrompt').textContent = promptLabel(r.p);
+    $('curGaze').textContent = 'Gaze ' + r.g;
+    $('curPrompt').parentNode.title = promptLabel(r.p) + ', gaze ' + r.g + ' (' + (S.idx + 1) + ' of ' + S.rows.length + ')';
+    $('curPos').textContent = (S.idx + 1) + '/' + S.rows.length;
+    const st = statusOf(r); const pill = $('curStatus');
+    pill.className = 'status-pill ' + st;
+    pill.textContent = st === 'done' ? 'complete' : st === 'unsure' ? 'unsure' : st === 'partial' ? (r.l1 && needsL2(r.l1) && !r.l2 ? 'needs L2' : r.l1 && S.requireL3 && !r.l3 ? 'needs L3' : 'incomplete') : 'not started';
+    renderTags(1, r.l1, (v) => pick('l1', v));
+    // the L2 row keeps its place so nothing below it moves; buttons appear only for device L1 tags
+    if (needsL2(r.l1) || r.l2) renderTags(2, r.l2, (v) => pick('l2', v));
+    else {
+      const ph = document.createElement('span'); ph.className = 'placeholder';
+      ph.textContent = r.l1 ? 'Not needed: "' + r.l1 + '" is not a device tag.' : 'Pick an L1 device tag (\u25B8) to code device activity.';
+      $('tagsL2').replaceChildren(ph); $('defL2').textContent = '';
+    }
+    renderTags(3, r.l3, (v) => pick('l3', v));
+    $('btnUnsure').setAttribute('aria-pressed', String(!!r.u));
+    if (document.activeElement !== $('notes')) $('notes').value = r.notes || '';
+    const canUndo = cleared && cleared.i === S.idx;
+    $('btnClearGaze').textContent = canUndo ? 'Undo clear' : 'Clear gaze';
+    $('btnClearGaze').title = canUndo ? 'Put back the codes you just cleared' : 'Remove all codes and the note from this gaze';
+    $('btnClearGaze').disabled = !canUndo && !(r.l1 || r.l2 || r.l3 || r.u || r.notes);
+    $('btnPrev').disabled = S.idx <= 0;
+    $('btnNext').disabled = S.idx >= S.rows.length - 1;
+  }
+
+  function renderProgress() {
+    const n = S.rows.length; const done = S.rows.filter(isDone).length;
+    const pct = n ? Math.round((done / n) * 100) : 0;
+    $('barFill').style.width = pct + '%';
+    $('progressText').textContent = done + ' / ' + n + ' complete (' + pct + '%)';
+  }
+
+  function touch() {
+    const r = cur(); r.t = new Date().toISOString();
+    S.dirty = true; save(); renderCurrent(); updateListItem(S.idx); renderProgress();
+  }
+
+  let advanceTimer = null;
+  function pick(field, value) {
+    cleared = null;
+    if (sel) { bulkPick(field, value); return; }
+    const r = cur();
+    const selecting = r[field] !== value;
+    r[field] = selecting ? value : '';
+    if (field === 'l1' && !needsL2(r.l1)) r.l2 = '';
+    touch();
+    clearTimeout(advanceTimer);
+    if (S.autoAdvance && selecting && isDone(r) && S.idx < S.rows.length - 1) {
+      advanceTimer = setTimeout(next, 250);
+    }
+  }
+
+  function go(i, carry) {
+    if (!S.rows.length) return;
+    clearTimeout(advanceTimer);
+    dropSel();   // moving to a gaze ends any multi-gaze selection
+    if (cleared && cleared.i !== i) cleared = null;
+    const prev = S.idx;
+    S.idx = Math.max(0, Math.min(S.rows.length - 1, i));
+    const r = cur(), before = S.rows[S.idx - 1];
+    // classroom state rarely changes gaze-to-gaze: carry it forward within a prompt
+    if (carry && !r.l3 && before && before.p === r.p && before.l3) { r.l3 = before.l3; S.dirty = true; }
+    save();
+    updateListItem(prev); updateListItem(S.idx); renderCurrent(); renderProgress();
+    const li = listItems[S.idx]; if (li) li.scrollIntoView({ block: 'nearest' });
+    pupilSync();
+  }
+  const next = () => go(S.idx + 1, true);
+  const prev = () => (sel ? go(sel.a, false) : go(S.idx - 1, false));
+  function nextTodo() {
+    const n = S.rows.length;
+    for (let k = 1; k <= n; k++) {
+      const i = (S.idx + k) % n;
+      if (!isDone(S.rows[i])) { go(i, i === S.idx + 1); return; }
+    }
+    alert('All gazes are complete.');
+  }
+  function jump() {
+    const v = Number($('jump').value); if (!Number.isFinite(v) || $('jump').value === '') return;
+    const r = cur();
+    let i = S.rows.findIndex((x) => x.g === v && r && x.p === r.p);
+    if (i < 0) i = S.rows.findIndex((x) => x.g === v);
+    if (i < 0) { alert('Gaze ' + v + ' is not in this session.'); return; }
+    go(i, false);
+  }
+
+  // ---------- export ----------
+  // the Participant_ID column holds just the number ("P31" typed by mistake is stored as "31")
+  const pidValue = (id) => { const t = String(id || '').trim(); const m = t.match(/^p-?(\d+)$/i); return m ? m[1] : t; };
+  function exportAoa() {
+    const header = ['Participant_ID', 'Prompt_Number', 'Gaze_Number', COLS[1], COLS[2], COLS[3], 'Unsure', 'Notes'];
+    const body = S.rows.map((r) => [pidValue(S.recording), /^\d+$/.test(r.p) ? Number(r.p) : r.p, r.g,
+      r.l1 || '', r.l2 || '', r.l3 || '', r.u ? 'Y' : 'N', r.notes || '']);
+    return [header].concat(body);
+  }
+  function toCsv(aoa) {
+    const esc = (v) => { const s = String(v == null ? '' : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    return aoa.map((row) => row.map(esc).join(',')).join('\r\n') + '\r\n';
+  }
+
+  // ---------- the session file on the rater's computer ----------
+  // Chrome/Edge: the rater picks the file once, then Save writes straight into it.
+  // Other browsers: Save downloads the file instead.
+  const FILE_PREFIX = String(BUILTIN_DICT.filePrefix || 'STUDY').replace(/[^A-Za-z0-9-]+/g, '-');
+  const canPickFile = typeof window.showSaveFilePicker === 'function';
+  const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const FILE_TYPES = [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } },
+                      { description: 'Excel workbook', accept: { [XLSX_MIME]: ['.xlsx'] } }];
+  let fileHandle = null;
+  // file name: <study code>_<MM-DD>_P<participant>_Gaze_Annotation (month-day only, no year)
+  // participant part of the file name always starts with "P" (31 -> P31; P31 stays P31)
+  const fileId = (id) => {
+    const t = String(id || '').trim().replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+    return t ? 'P' + t.replace(/^p-?/i, '') : '';
+  };
+  const suggestedName = (ext) => [FILE_PREFIX, (S.sessionDate || '').slice(5) || 'MM-DD', fileId(S.recording), 'Gaze_Annotation']
+    .filter(Boolean).join('_') + (ext || '.csv');
+
+  function fileBody(name) {
+    if (/\.xlsx$/i.test(name)) {
+      if (!window.XLSX) throw new Error('Excel files need the SheetJS library, which did not load (offline?). Use Save as... and pick CSV.');
+      const wb = XLSX.utils.book_new();
+      const tab = (fileId(S.recording) || 'Annotations').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exportAoa()), tab);
+      return new Blob([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], { type: XLSX_MIME });
+    }
+    return new Blob(['﻿' + toCsv(exportAoa())], { type: 'text/csv;charset=utf-8' });
+  }
+  function download(blob, name) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  // remember the chosen file across page reloads (file handles can be stored in IndexedDB)
+  function idb(mode, op) {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('gazeAnnotator', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('kv');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        try {
+          const tx = open.result.transaction('kv', mode); const req = op(tx.objectStore('kv'));
+          tx.oncomplete = () => resolve(req.result); tx.onerror = () => reject(tx.error);
+        } catch (e) { reject(e); }
+      };
+    });
+  }
+  const rememberHandle = (h) => { try { return idb('readwrite', (st) => (h ? st.put(h, 'file') : st.delete('file'))).catch(() => {}); } catch (e) { return Promise.resolve(); } };
+  const recallHandle = () => { try { return idb('readonly', (st) => st.get('file')).catch(() => null); } catch (e) { return Promise.resolve(null); } };
+
+  function markSaved(name) { S.dirty = false; S.savedAt = new Date().toISOString(); S.lastFile = name; save(); }
+  async function saveSession(asNew) {
+    if (!S.rows.length) { alert('Nothing to save yet - set up the session first.'); return false; }
+    try {
+      if (!canPickFile) {
+        const name = suggestedName(asNew ? '.xlsx' : '.csv');
+        download(fileBody(name), name); markSaved(name); return true;
+      }
+      if (asNew || !fileHandle) {
+        const h = await window.showSaveFilePicker({ suggestedName: asNew && fileHandle ? fileHandle.name : suggestedName(),
+          types: FILE_TYPES, id: 'gaze-annotations', startIn: 'documents' });
+        fileHandle = h; rememberHandle(h);
+      }
+      if ((await fileHandle.queryPermission({ mode: 'readwrite' })) !== 'granted' &&
+          (await fileHandle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+        throw new Error('the browser was not allowed to write to "' + fileHandle.name + '".');
+      }
+      const body = fileBody(fileHandle.name);
+      const w = await fileHandle.createWritable(); await w.write(body); await w.close();
+      markSaved(fileHandle.name); return true;
+    } catch (e) {
+      if (e && e.name === 'AbortError') { renderFileStatus(); return false; }   // the rater closed the dialog
+      alert('Could not save: ' + ((e && e.message) || e) + '\n\nIf the file is open in Excel, close it there and press Save again.');
+      renderFileStatus(); return false;
+    }
+  }
+  async function openSession() {
+    if (!window.showOpenFilePicker) { $('fileImport').click(); return; }
+    try {
+      const [h] = await window.showOpenFilePicker({ types: FILE_TYPES, id: 'gaze-annotations', startIn: 'documents' });
+      if ((await importFile(await h.getFile())) === true) { fileHandle = h; rememberHandle(h); markSaved(h.name); }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      $('importMsg').className = 'error'; $('importMsg').textContent = 'Could not open: ' + ((e && e.message) || e);
+    }
+  }
+
+  // ---------- views / wiring ----------
+  function show(view) {
+    const ann = view === 'annotate' && S.rows.length > 0;
+    $('viewSetup').classList.toggle('hidden', ann);
+    $('viewAnnotate').classList.toggle('hidden', !ann);
+    $('btnSetup').classList.toggle('on', !ann);
+    $('btnAnnotate').classList.toggle('on', ann);
+    $('hdrProgress').classList.toggle('hidden', !S.rows.length);
+    $('hdrSpacer').classList.toggle('hidden', !!S.rows.length);
+    $('btnAnnotate').disabled = !S.rows.length;
+    if (ann) { go(S.idx, false); }
+  }
+  function renderAll() {
+    [1, 2, 3].forEach((n) => { $('nameL' + n).textContent = colName(n).replace(/_/g, ' '); });
+    $('recording').value = S.recording || ''; $('sessionDate').value = S.sessionDate || '';
+    $('autoAdvance').checked = !!S.autoAdvance;
+    $('requireL3').checked = !!S.requireL3;
+    $('syncPupil').checked = !!S.syncPupil;
+    $('hintL3').textContent = (S.requireL3 ? 'required' : 'optional') + ' · carries over within a prompt';
+    renderDictInfo(); renderPrompts(); renderList(); renderProgress(); renderFileStatus();
+    if (!canPickFile) {
+      $('btnSave').title = 'Download the session file (.csv) - this browser cannot save into a chosen file (Ctrl/Cmd+S)';
+      $('btnSaveAs').textContent = 'Download .xlsx'; $('btnSaveAs').title = 'Download the session file as an Excel workbook';
+    }
+  }
+
+  $('fileDict').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    $('dictErr').textContent = '';
+    try {
+      const parsed = parseDictionary(await readTable(f));
+      const names = Object.keys(parsed);
+      if (!names.length) throw new Error('No rows starting with "L1_" were found. Column A must hold the level (e.g. L1_Gaze_Location), column B the tag, column C the definition.');
+      S.dictSheets = Object.assign({ [BUILTIN_NAME]: BUILTIN }, parsed); S.dictFile = f.name;
+      S.dictSheet = names[names.length - 1];   // newest sheet is the last one
+      save(); renderAll();
+    } catch (err) { $('dictErr').textContent = 'Could not read the dictionary: ' + err.message; $('dictMore').open = true; }
+    e.target.value = '';
+  });
+  $('dictSheet').addEventListener('change', (e) => { S.dictSheet = e.target.value; save(); renderAll(); });
+  $('recording').addEventListener('input', (e) => { S.recording = e.target.value; if (S.rows.length) markDirty(); saveSoon(); });
+  $('sessionDate').addEventListener('input', (e) => { S.sessionDate = e.target.value; saveSoon(); });
+  $('btnAddPrompt').addEventListener('click', () => {
+    const last = S.prompts[S.prompts.length - 1];
+    const from = last && last.to !== '' ? Number(last.to) + 1 : '';
+    const nextNum = Math.max(0, ...S.prompts.map((p) => Number(promptNum(p.name)) || 0)) + 1;
+    S.prompts.push({ name: String(nextNum), from, to: '' });
+    renderPrompts(); saveSoon();
+  });
+  $('btnStart').addEventListener('click', startAnnotating);
+  $('fileImport').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) await importFile(f); e.target.value = ''; });
+  $('btnOpen').addEventListener('click', openSession);
+  $('btnClear').addEventListener('click', () => {
+    if (!confirm('Clear this session from the page? Your saved session file is not touched.' +
+      (S.dirty && S.rows.length ? '\n\nWARNING: there are unsaved changes - press Cancel, then Save first.' : ''))) return;
+    S.rows = []; S.idx = 0; S.recording = ''; S.sessionDate = ''; S.prompts = [{ name: '1', from: '', to: '' }];
+    S.dirty = false; S.lastFile = ''; S.savedAt = ''; fileHandle = null; rememberHandle(null);
+    save(); renderAll(); show('setup');
+  });
+  $('btnSetup').addEventListener('click', () => show('setup'));
+  $('btnAnnotate').addEventListener('click', () => show('annotate'));
+  $('btnSave').addEventListener('click', () => saveSession(false));
+  $('btnSaveAs').addEventListener('click', () => saveSession(true));
+  window.addEventListener('beforeunload', (e) => { if (S.rows.length && S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+  $('btnPrev').addEventListener('click', prev);
+  $('btnNext').addEventListener('click', next);
+  $('btnNextTodo').addEventListener('click', nextTodo);
+  let cleared = null;   // { i, row }: lets a one-gaze clear be undone until you move on or change it
+  function clearGaze() {
+    const blank = { l1: '', l2: '', l3: '', u: false, notes: '' };
+    if (sel) { snapshot(); const now = new Date().toISOString(); selRows().forEach((r) => Object.assign(r, blank, { t: now })); bulkChanged(); return; }
+    const r = cur(); if (!r) return;
+    if (cleared && cleared.i === S.idx) { S.rows[S.idx] = cleared.row; cleared = null; S.dirty = true; save(); renderCurrent(); updateListItem(S.idx); renderProgress(); return; }
+    cleared = { i: S.idx, row: Object.assign({}, r) };
+    Object.assign(r, blank); $('notes').value = ''; touch();
+  }
+  $('btnClearGaze').addEventListener('click', clearGaze);
+  function toggleUnsure() { cleared = null; if (sel) { bulkUnsure(); return; } const r = cur(); if (!r) return; r.u = !r.u; touch(); }
+  $('btnUndo').addEventListener('click', undoBulk);
+  $('btnDone').addEventListener('click', finishSel);
+  $('notes').addEventListener('focus', () => { if (sel) snapshot(); });
+  $('btnUnsure').addEventListener('click', toggleUnsure);
+  $('btnJump').addEventListener('click', jump);
+  $('jump').addEventListener('keydown', (e) => { if (e.key === 'Enter') jump(); });
+  $('autoAdvance').addEventListener('change', (e) => { S.autoAdvance = e.target.checked; save(); });
+  $('requireL3').addEventListener('change', (e) => {
+    S.requireL3 = e.target.checked; save();
+    $('hintL3').textContent = (S.requireL3 ? 'required' : 'optional') + ' · carries over within a prompt';
+    S.rows.forEach((r, i) => updateListItem(i)); renderCurrent(); renderProgress();
+  });
+  $('notes').addEventListener('input', (e) => {
+    cleared = null;
+    if (sel) {   // the same note on every selected gaze
+      const now = new Date().toISOString();
+      selRows().forEach((r) => { r.notes = e.target.value; r.t = now; });
+      markDirty(); saveSoon();
+      for (let k = sel.a; k <= sel.b; k++) updateListItem(k);
+      renderProgress(); return;
+    }
+    const r = cur(); if (!r) return;
+    r.notes = e.target.value; r.t = new Date().toISOString();
+    markDirty(); saveSoon(); updateListItem(S.idx); renderProgress();
+    const st = statusOf(r); $('curStatus').className = 'status-pill ' + st;
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); saveSession(e.shiftKey); return; }
+    if ($('viewAnnotate').classList.contains('hidden')) return;
+    // shortcuts are off while typing (notes, gaze #), so "a", "d", "u" can be typed normally
+    const el = e.target, t = el.tagName;
+    const typing = t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable ||
+      (t === 'INPUT' && !['checkbox', 'radio', 'button'].includes(el.type));
+    if (typing) { if (e.key === 'Escape') el.blur(); return; }
+    if (e.key === 'Escape' && sel) { e.preventDefault(); finishSel(); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z' && sel && undo) { e.preventDefault(); undoBulk(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat && e.key.length === 1) return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k === 'ArrowRight' || k === 'd') { e.preventDefault(); next(); }
+    else if (k === 'ArrowLeft' || k === 'a') { e.preventDefault(); prev(); }
+    else if (k === 'u') { e.preventDefault(); toggleUnsure(); }
+  });
+
+  // expose a few internals for automated testing only
+  // ---------- optional: keep Pupil Cloud's Manual Mapper on the same fixation ----------
+  // Needs the "Gaze Annotator - Pupil Cloud Sync" Chrome extension; without it nothing here runs
+  // and the switch stays hidden. Gaze numbers are Pupil fixation numbers.
+  let pupilExt = false, syncTimer = null, lastSent = null, reqId = 0;
+  const pupilSend = (type, fixation) => window.postMessage({ source: 'gaze-annotator', type, fixation, id: ++reqId }, '*');
+  function setSyncState(text, cls) { $('syncState').textContent = text; $('syncState').className = 'syncstate ' + (cls || ''); $('syncState').title = text; }
+  function pupilSync(force) {
+    if (!pupilExt || !S.syncPupil || sel) return;
+    const r = cur(); if (!r || (!force && r.g === lastSent)) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => { lastSent = r.g; setSyncState('Pupil → ' + r.g + '…'); pupilSend('goto', r.g); }, 120);
+  }
+  window.addEventListener('message', (e) => {
+    if (e.source !== window || !e.data || e.data.source !== 'gaze-pupil-ext') return;
+    const m = e.data;
+    if (m.type === 'hello') {
+      pupilExt = true; $('syncWrap').classList.remove('hidden');
+      if (S.syncPupil) { setSyncState('linking…'); pupilSend('status'); pupilSync(true); }
+      return;
+    }
+    if (m.type !== 'result') return;
+    if (!m.ok) { lastSent = null; setSyncState('⚠ Pupil: ' + (m.error || 'not synced'), 'bad'); return; }
+    if (m.req === 'status') { if (!$('syncState').textContent.startsWith('✓')) setSyncState('Pupil linked', 'good'); }
+    else setSyncState('✓ Pupil on ' + m.fixation, 'good');
+  });
+  $('syncPupil').addEventListener('change', (e) => {
+    S.syncPupil = e.target.checked; save();
+    if (S.syncPupil) { setSyncState('linking…'); pupilSend('status'); pupilSync(true); } else setSyncState('');
+  });
+
+  window.__gaze = { get state() { return S; }, exportAoa, toCsv, parseCsv, statusOf, saveSession, suggestedName };
+
+  renderAll();
+  show(S.rows.length && dict() ? 'annotate' : 'setup');
+  if (canPickFile && S.rows.length) recallHandle().then((h) => { if (h) { fileHandle = h; renderFileStatus(); } });
+})();
+</script>
+</body>
+</html>

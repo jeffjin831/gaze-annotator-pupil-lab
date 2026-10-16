@@ -1,0 +1,6 @@
+# Keep files byte-identical on every OS: the security review's SHA-256 fingerprints and the
+# build's integrity check of vendor/xlsx-0.20.3.full.min.js depend on exact bytes (LF line endings).
+* text=auto eol=lf
+*.xlsx binary
+*.zip binary
+*.mp4 binary

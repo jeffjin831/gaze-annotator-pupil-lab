@@ -1,0 +1,16 @@
+# Pupil Labs' own page code, saved locally for reference: proprietary, never commit
+input/pupil-source/
+
+# build and video outputs (published as GitHub Release assets instead)
+dist/
+video/out/
+
+# local tooling
+.claude/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# the lab's own coding dictionary: never commit (tools/build.py --lab bakes it into the lab package)
+private/

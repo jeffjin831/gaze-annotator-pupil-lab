@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Combine Gaze Files</title>
+<!-- SheetJS (pinned + integrity-checked); the shipped build inlines it so this works offline -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
+        integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"
+        crossorigin="anonymous"></script>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --ink: #1d2433; --muted: #667085; --line: #dde2ea;
+    --btn: #ffffff; --btn-hover: #eef2f8; --accent: #2457d6; --accent-ink: #ffffff;
+    --done: #1f9d55; --warn: #b7791f; --danger: #c0392b; --drop: #eef3ff;
+    --scroll: #c9d0db;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b2029; --ink: #e7ebf2; --muted: #98a2b3; --line: #313948;
+      --btn: #222834; --btn-hover: #2b3341; --accent: #5b8cff; --accent-ink: #0d1220;
+      --done: #3ccf7a; --warn: #f0b429; --danger: #ff6b5b; --drop: #1e2738;
+      --scroll: #3a4352;
+    }
+  }
+  * { box-sizing: border-box; }
+  * { scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .hidden { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn { background: var(--btn); border: 1px solid var(--line); border-radius: 7px; padding: 6px 12px; }
+  .btn:hover { background: var(--btn-hover); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
+  .drop { border: 2px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center; background: var(--panel); margin-top: 14px; }
+  .drop.over { border-color: var(--accent); background: var(--drop); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.dup td { color: var(--warn); }
+  .x { border: 0; background: none; color: var(--muted); padding: 0 4px; }
+  .x:hover { color: var(--danger); }
+  .msgs div { margin-top: 4px; font-size: 13px; }
+  .warn { color: var(--warn); } .error { color: var(--danger); } .ok { color: var(--done); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .actions .spacer { flex: 1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Combine gaze annotation files</h1>
+  <div class="muted">Put the participant files from one data-collection session into a single file. Files are only read; nothing is changed or uploaded.</div>
+
+  <div class="drop" id="drop">
+    <div>Drag the participant files here (<code>.csv</code> or <code>.xlsx</code>)</div>
+    <div style="margin-top:8px"><button class="btn" id="btnPick">Choose files&hellip;</button>
+      <input type="file" id="filePick" accept=".csv,.xlsx,.xls" multiple class="hidden"></div>
+    <div class="muted small" style="margin-top:6px">You can add files in several goes.</div>
+  </div>
+
+  <div class="card hidden" id="listCard">
+    <table>
+      <thead><tr><th>Participant (tab)</th><th>From file</th><th class="num">Gazes</th><th class="num">Coded (L1)</th><th class="num">Unsure</th><th></th></tr></thead>
+      <tbody id="list"></tbody>
+    </table>
+    <div class="msgs" id="msgs"></div>
+    <div class="actions">
+      <button class="btn primary" id="btnXlsx">Save workbook (one tab per participant)</button>
+      <button class="btn" id="btnCsv">Save one CSV (all participants)</button>
+      <span class="spacer"></span>
+      <button class="btn" id="btnClear">Clear list</button>
+    </div>
+    <div id="saveMsg" class="small" style="margin-top:8px"></div>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const HEADER = ['Participant_ID', 'Prompt_Number', 'Gaze_Number', 'L1_Gaze_Location', 'L2_Gaze_Location', 'L3_Gaze_Context', 'Unsure', 'Notes'];
+  const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  let parts = [];   // { id, file, date, rows: [[...8 template values]] }
+
+  // ---------- reading ----------
+  function parseCsv(text) {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; }
+        else f += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(f); rows.push(row); row = []; f = '';
+      } else f += c;
+    }
+    if (f !== '' || row.length) { row.push(f); rows.push(row); }
+    return rows;
+  }
+  async function readTable(file) {
+    if (/\.csv$/i.test(file.name)) return [{ name: '', rows: parseCsv((await file.text()).replace(/^﻿/, '')) }];
+    if (!window.XLSX) throw new Error('the Excel reader did not load');
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    return wb.SheetNames.map((n) => ({ name: n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: true }) }));
+  }
+  const norm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  // a sheet in the annotation template -> rows in template order, or null if it has no Gaze column
+  function parseSheet(rowsIn) {
+    for (let h = 0; h < Math.min(rowsIn.length, 20); h++) {
+      const hdr = rowsIn[h].map(norm);
+      const g = hdr.findIndex((c) => ['gaze', 'gazenumber', 'gazeno', 'gazenum', 'gazeid'].includes(c));
+      if (g < 0) continue;
+      const col = [
+        hdr.findIndex((c) => c === 'participantid' || c === 'participant'),
+        hdr.findIndex((c) => c === 'prompt' || c === 'promptnumber' || c === 'promptname'), g,
+        hdr.findIndex((c) => /^l1/.test(c)), hdr.findIndex((c) => /^l2/.test(c)), hdr.findIndex((c) => /^l3/.test(c)),
+        hdr.findIndex((c) => /^unsure/.test(c)), hdr.findIndex((c) => c === 'notes' || c === 'note')];
+      const get = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : '');
+      const out = [];
+      for (const r of rowsIn.slice(h + 1)) {
+        const gs = get(r, g); if (gs === '' || !Number.isFinite(Number(gs))) continue;
+        const v = col.map((i) => get(r, i));
+        v[1] = /^\d+$/.test(v[1]) ? Number(v[1]) : v[1]; v[2] = Number(v[2]);
+        v[6] = /^(y|yes|true|1)$/i.test(v[6]) ? 'Y' : 'N';
+        const pm = v[0].match(/^p-?(\d+)$/i); if (pm) v[0] = pm[1];   // Participant_ID holds just the number
+        out.push(v);
+      }
+      return out.length ? out : null;
+    }
+    return null;
+  }
+  async function addFiles(files) {
+    const errs = [];
+    for (const f of files) {
+      try {
+        const md = f.name.match(/^(.+?)_(\d{2}-\d{2})_/);   // <study code>_<MM-DD>_...
+        let n = 0;
+        for (const sh of await readTable(f)) {
+          const rows = parseSheet(sh.rows); if (!rows) continue;
+          const id = rows[0][0] || sh.name || f.name.replace(/\.[^.]+$/, '');
+          rows.forEach((r) => { if (!r[0]) r[0] = id; });
+          parts.push({ id, file: f.name, prefix: md ? md[1] : '', date: md ? md[2] : '', rows }); n++;
+        }
+        if (!n) errs.push('"' + f.name + '" has no Gaze_Number column with gaze numbers - skipped.');
+      } catch (e) { errs.push('Could not read "' + f.name + '": ' + ((e && e.message) || e)); }
+    }
+    parts.sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
+    render(errs);
+  }
+
+  // ---------- list ----------
+  const key = (id) => String(id).trim().toLowerCase();
+  function render(errs) {
+    $('listCard').classList.toggle('hidden', !parts.length && !(errs && errs.length));
+    $('saveMsg').textContent = '';
+    const counts = {}; parts.forEach((p) => { counts[key(p.id)] = (counts[key(p.id)] || 0) + 1; });
+    const body = $('list'); body.textContent = '';
+    parts.forEach((p, i) => {
+      const tr = document.createElement('tr'); if (counts[key(p.id)] > 1) tr.className = 'dup';
+      const cells = [label(p.id), p.file, p.rows.length, p.rows.filter((r) => r[3]).length, p.rows.filter((r) => r[6] === 'Y').length];
+      cells.forEach((c, j) => { const td = document.createElement('td'); td.textContent = c; if (j > 1) td.className = 'num'; tr.appendChild(td); });
+      const td = document.createElement('td'); const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕'; x.title = 'Remove from the list';
+      x.addEventListener('click', () => { parts.splice(i, 1); render(); }); td.appendChild(x); tr.appendChild(td);
+      body.appendChild(tr);
+    });
+    const msgs = $('msgs'); msgs.textContent = '';
+    const say = (cls, t) => { const d = document.createElement('div'); d.className = cls; d.textContent = t; msgs.appendChild(d); };
+    (errs || []).forEach((t) => say('error', t));
+    const dups = Object.keys(counts).filter((k) => counts[k] > 1);
+    if (dups.length) say('warn', 'Listed more than once: ' + dups.map((k) => parts.find((p) => key(p.id) === k).id).join(', ') +
+      '. Remove the copies you do not want (✕); otherwise each copy gets its own tab (e.g. ' + parts.find((p) => key(p.id) === dups[0]).id + '_2).');
+    const dates = [...new Set(parts.map((p) => p.date).filter(Boolean))];
+    if (dates.length > 1) say('warn', 'These files come from different session dates: ' + dates.join(', ') + '.');
+    if (parts.length) say('muted', parts.length + ' participant' + (parts.length > 1 ? 's' : '') + ', ' + parts.reduce((n, p) => n + p.rows.length, 0) + ' gazes in total.');
+    $('btnXlsx').disabled = $('btnCsv').disabled = !parts.length;
+  }
+
+  // ---------- saving ----------
+  function baseName() {
+    const one = (k) => { const v = [...new Set(parts.map((p) => p[k]).filter(Boolean))]; return v.length === 1 ? v[0] : ''; };
+    return [one('prefix'), one('date'), 'Gaze_Annotation_Combined'].filter(Boolean).join('_');
+  }
+  // Excel tab names: at most 31 characters, none of []:*?/\ and unique within the workbook
+  const label = (id) => (/^\d+$/.test(String(id).trim()) ? 'P' + String(id).trim() : String(id));   // P31, like the file names
+  function sheetName(id, used) {
+    id = label(id);
+    const base = (String(id).trim().replace(/[\[\]:*?\/\\]/g, '-') || 'Participant').slice(0, 31);
+    let name = base, k = 2;
+    while (used.has(name.toLowerCase())) name = base.slice(0, 27) + '_' + k++;
+    used.add(name.toLowerCase()); return name;
+  }
+  function toCsv(aoa) {
+    const esc = (v) => { const s = String(v == null ? '' : v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    return aoa.map((row) => row.map(esc).join(',')).join('\r\n') + '\r\n';
+  }
+  async function saveAs(blob, name, type) {
+    if (typeof window.showSaveFilePicker !== 'function') {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      return name;
+    }
+    const h = await window.showSaveFilePicker({ suggestedName: name, types: [type], id: 'gaze-combined', startIn: 'documents' });
+    const w = await h.createWritable(); await w.write(blob); await w.close();
+    return h.name;
+  }
+  async function save(kind) {
+    const msg = $('saveMsg'); msg.className = 'small'; msg.textContent = '';
+    try {
+      let blob, name;
+      if (kind === 'xlsx') {
+        if (!window.XLSX) throw new Error('the Excel library did not load. Use "Save one CSV" instead.');
+        const wb = XLSX.utils.book_new(); const used = new Set();
+        parts.forEach((p) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([HEADER].concat(p.rows)), sheetName(p.id, used)));
+        blob = new Blob([XLSX.write(wb, { type: 'array', bookType: 'xlsx' })], { type: XLSX_MIME });
+        name = await saveAs(blob, baseName() + '.xlsx', { description: 'Excel workbook', accept: { [XLSX_MIME]: ['.xlsx'] } });
+      } else {
+        const all = [HEADER].concat(...parts.map((p) => p.rows));
+        blob = new Blob(['﻿' + toCsv(all)], { type: 'text/csv;charset=utf-8' });
+        name = await saveAs(blob, baseName() + '.csv', { description: 'CSV file', accept: { 'text/csv': ['.csv'] } });
+      }
+      msg.className = 'small ok'; msg.textContent = 'Saved "' + name + '".';
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      msg.className = 'small error'; msg.textContent = 'Could not save: ' + ((e && e.message) || e) + ' (If the file is open in Excel, close it and try again.)';
+    }
+  }
+
+  // ---------- wiring ----------
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, () => drop.classList.remove('over')));
+  drop.addEventListener('drop', (e) => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
+  $('btnPick').addEventListener('click', () => $('filePick').click());
+  $('filePick').addEventListener('change', (e) => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) addFiles(fs); });
+  $('btnXlsx').addEventListener('click', () => save('xlsx'));
+  $('btnCsv').addEventListener('click', () => save('csv'));
+  $('btnClear').addEventListener('click', () => { parts = []; render(); });
+
+  // exposed for automated testing only
+  window.__combine = { addFiles, get parts() { return parts; }, toCsv };
+})();
+</script>
+</body>
+</html>

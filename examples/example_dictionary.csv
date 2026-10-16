@@ -1,0 +1,16 @@
+Level,Category,Definition
+L1_Gaze_Location,Off,Gaze is not on any of the targets below.
+L1_Gaze_Location,Screen,Gaze is on the main presentation or projection screen.
+L1_Gaze_Location,Person-Instructor,Gaze is on the person leading the session.
+L1_Gaze_Location,Person-Peer,Gaze is on another participant.
+L1_Gaze_Location,Device-Laptop,Gaze is on a laptop (screen or keyboard).
+L1_Gaze_Location,Device-Phone,Gaze is on a phone.
+L1_Gaze_Location,Device-Paper,Gaze is on paper or other writing material.
+L1_Gaze_Location,Unclear,The target cannot be determined.
+L1_Gaze_Location,Glasses off,The eye tracker is not being worn.
+L2_Device_Activity,On-task,Using the device for the task at hand.
+L2_Device_Activity,Off-task,Using the device for something unrelated to the task.
+L2_Device_Activity,Can't tell,What the participant is doing on the device is not visible.
+L3_Gaze_Context,Whole group,
+L3_Gaze_Context,Small group,
+L3_Gaze_Context,Individual work,

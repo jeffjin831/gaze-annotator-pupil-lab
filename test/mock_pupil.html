@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mock Manual Mapper</title>
+<!-- Test page only: imitates Pupil Cloud's Manual Mapper (React, MUI-style markup) as read from
+     Pupil's page code: the Fixation box jumps on Enter (not on blur), unknown numbers raise a
+     "Fixation not found" pop-up, Skip buttons step by one, keys S / A step unless typing in a box.
+     Used to try the sync extension's pupil.js without real recordings. Not shipped to raters. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<style>
+  body { font: 15px system-ui, sans-serif; background: #1f1f22; color: #eee; margin: 24px; }
+  .panel { width: 260px; }
+  input { background: none; border: 0; border-bottom: 1px solid #aaa; color: #eee; font-size: 16px; width: 120px; }
+  button { display: block; width: 100%; margin-top: 10px; padding: 8px; background: #333; color: #ccc; border: 0; border-radius: 4px; }
+  #shown { margin-top: 18px; color: #8cf; }
+  .snack { position: fixed; left: 10px; bottom: 10px; background: #c33; color: #fff; padding: 6px 10px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+  const h = React.createElement;
+  const IDS = Array.from({ length: 1500 }, (_, i) => i + 1).filter((id) => id % 97 !== 0);   // a few ids missing
+  let api = null;   // like Pupil's store actions, so global key shortcuts can reach them
+  function Mapper() {
+    const [idx, setIdx] = React.useState(IDS.indexOf(1013));
+    const [draft, setDraft] = React.useState('');
+    const [snack, setSnack] = React.useState(null);
+    const id = IDS[idx];
+    React.useEffect(() => { setDraft(String(id)); }, [id]);   // Pupil syncs the box to the current fixation
+    const setFixation = (n) => {
+      const i = IDS.indexOf(n);
+      if (i < 0) { setSnack('Fixation not found'); setTimeout(() => setSnack(null), 1500); return; }
+      setIdx(i);
+    };
+    api = { next: () => setIdx((i) => Math.min(IDS.length - 1, i + 1)), prev: () => setIdx((i) => Math.max(0, i - 1)) };
+    return h(React.Fragment, null,
+      h('div', { className: 'MuiBox-root css-gg4vpm panel' },
+        h('div', null, 'Manual Mapper'),
+        h('div', { className: 'MuiBox-root css-70qvj9' },
+          h('div', { className: 'MuiFormControl-root MuiTextField-root css-uymsvr' },
+            h('div', { className: 'MuiInputBase-root MuiInput-root MuiInput-underline css-di7nrw' },
+              h('input', { 'aria-invalid': 'false', autoComplete: 'off', min: '1', className: 'MuiInputBase-input MuiInput-input css-x29uq3',
+                type: 'number', value: draft,
+                onChange: (e) => { let t = e.target.value; if (t) { const v = Math.abs(Number(t)); t = v > 0 ? String(v) : ''; } setDraft(t); },
+                onKeyDown: (e) => { if (e.key === 'Enter') { const v = +draft; if (isNaN(v) || v < 1) return; setFixation(v); } } })))),
+        h('span', null, h('button', { className: 'MuiButtonBase-root MuiButton-root css-384zrv', type: 'button', onClick: () => api.next() }, 'Skip to next')),
+        h('span', null, h('button', { className: 'MuiButtonBase-root MuiButton-root css-384zrv', type: 'button', onClick: () => api.prev() }, 'Skip to previous')),
+        h('div', { id: 'shown' }, 'Showing fixation ' + id)),
+      snack ? h('div', { className: 'notistack-SnackbarContainer' }, h('div', { className: 'notistack-MuiContent notistack-MuiContent-error snack', role: 'alert' }, snack)) : null);
+  }
+  // global shortcuts as in Pupil: ignored while typing in an input/textarea/list item or with Ctrl/Cmd
+  document.addEventListener('keydown', (e) => {
+    const a = document.activeElement, typing = a && ['INPUT', 'TEXTAREA', 'LI'].includes(a.tagName);
+    if (e.ctrlKey || e.metaKey || typing) return;
+    if (e.code === 'KeyS') { e.preventDefault(); api.next(); }
+    if (e.code === 'KeyA') { e.preventDefault(); api.prev(); }
+  });
+  ReactDOM.createRoot(document.getElementById('root')).render(h(Mapper));
+</script>
+</body>
+</html>

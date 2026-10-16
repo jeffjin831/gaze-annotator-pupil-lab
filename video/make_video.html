@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Make guide video</title>
+<!-- Dev tool (not shipped). Drives the real app in an iframe, captures each step with html2canvas,
+     animates the scenes on a canvas and encodes an MP4 with WebCodecs + mp4-muxer.
+     Open through tools/devserver.py, which also stores the result in video/out/. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js"></script>
+<style>
+  body { margin: 0; background: #111; color: #ddd; font: 13px system-ui, sans-serif; }
+  #log { padding: 8px 12px; white-space: pre-wrap; max-height: 180px; overflow: auto; }
+  #stage { position: absolute; left: -5000px; top: 0; }
+  #stage iframe { width: 1280px; height: 720px; border: 0; background: #fff; }
+  #preview { width: 640px; height: 360px; margin: 8px 12px; background: #000; display: block; }
+</style>
+</head>
+<body>
+<div id="log">ready</div>
+<canvas id="preview" width="1280" height="720"></canvas>
+<div id="stage"></div>
+<script>
+(async function () {
+  'use strict';
+  const W = 1280, H = 720, FPS = 30, SRC_SCALE = 1.5;       // captures are 1920x1080 (1280x720 CSS px x 1.5)
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const logEl = document.getElementById('log');
+  const log = (m) => { logEl.textContent += '\n' + m; logEl.scrollTop = 1e9; window.__status = m; };
+  window.__done = false;
+
+  // ------------------------------------------------------------------ capturing the real app
+  const H2C = await (await fetch('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')).text();
+  const stage = document.getElementById('stage');
+  async function openFrame(url) {
+    stage.textContent = '';
+    const f = document.createElement('iframe'); f.src = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now();   // never a cached copy
+    stage.appendChild(f);
+    await new Promise((r) => (f.onload = r)); await sleep(500);
+    f.contentWindow.eval(H2C);
+    const st = f.contentDocument.createElement('style');   // html2canvas cannot parse color-mix()
+    st.textContent = '#list li.sel { background: rgba(36, 87, 214, .2) !important; }' +
+      'details:not([open]) > :not(summary) { display: none !important; }';   // html2canvas ignores <details> state
+    f.contentDocument.head.appendChild(st);
+    return f.contentWindow;
+  }
+  function rectOf(w, target) {
+    let els = typeof target === 'function' ? target(w.document) : [...w.document.querySelectorAll(target)];
+    if (!Array.isArray(els)) els = [els];
+    els = els.filter(Boolean);
+    if (!els.length) return null;
+    const rs = els.map((e) => e.getBoundingClientRect());
+    const x = Math.min(...rs.map((r) => r.left)), y = Math.min(...rs.map((r) => r.top));
+    return { x, y, w: Math.max(...rs.map((r) => r.right)) - x, h: Math.max(...rs.map((r) => r.bottom)) - y };
+  }
+  const shots = {};
+  async function shot(name, w, rects) {
+    await sleep(250);
+    const bg = w.getComputedStyle(w.document.body).backgroundColor;
+    const canvas = await w.html2canvas(w.document.body, { scale: SRC_SCALE, width: 1280, height: 720, windowWidth: 1280, windowHeight: 720,
+      x: 0, y: 0, scrollX: 0, scrollY: 0, backgroundColor: bg, logging: false });
+    const r = {};
+    for (const [k, t] of Object.entries(rects || {})) r[k] = rectOf(w, t);
+    // copy into a canvas owned by this page: the iframe's canvas dies with the iframe
+    const own = document.createElement('canvas'); own.width = canvas.width; own.height = canvas.height;
+    own.getContext('2d').drawImage(canvas, 0, 0);
+    shots[name] = { img: own, rects: r };
+    log('captured ' + name);
+  }
+  const byText = (sel, text) => (d) => [...d.querySelectorAll(sel)].find((b) => b.textContent.trim() === text);
+  const li = (i) => (d) => d.querySelector('#list li[data-i="' + i + '"]');
+
+  // --- the app, fresh
+  localStorage.removeItem('gazeAnnotator.v1');
+  await new Promise((r) => { const q = indexedDB.deleteDatabase('gazeAnnotator'); q.onsuccess = q.onerror = q.onblocked = r; });
+  let w = await openFrame('/gaze_annotator.html');
+  const $ = (id) => w.document.getElementById(id);
+  const typeIn = (el, v) => { el.value = v; el.dispatchEvent(new w.Event('input', { bubbles: true })); };
+  const tag = (lvl, label) => [...w.document.querySelectorAll('#tagsL' + lvl + ' button')].find((b) => b.textContent === label).click();
+  const key = (k) => w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, bubbles: true }));
+  const mouse = (type, el, extra) => el.dispatchEvent(new w.MouseEvent(type, Object.assign({ bubbles: true, cancelable: true, button: 0 }, extra || {})));
+  const openGaze = (i) => { mouse('mousedown', w.document.querySelector('#list li[data-i="' + i + '"]')); mouse('mouseup', w.document); };
+  w.showSaveFilePicker = async (o) => ({ name: o.suggestedName, queryPermission: async () => 'granted', requestPermission: async () => 'granted',
+    createWritable: async () => ({ write: async () => {}, close: async () => {} }) });
+  w.confirm = () => true;
+
+  await shot('setupEmpty', w, { session: (d) => d.querySelectorAll('.card')[0], dict: '.dict-card', resume: (d) => d.querySelectorAll('#viewSetup .col')[1] });
+  typeIn($('recording'), '31'); typeIn($('sessionDate'), '2026-10-09');
+  let ins = w.document.querySelectorAll('#promptBody input'); typeIn(ins[1], '100'); typeIn(ins[2], '140');
+  $('btnAddPrompt').click(); ins = w.document.querySelectorAll('#promptBody input'); typeIn(ins[5], '180');
+  await shot('setupFilled', w, { pid: '#recording', date: '#sessionDate', prompts: '.ptable', start: '#btnStart', left: (d) => d.querySelector('#viewSetup .col') });
+  $('btnStart').click(); await sleep(600);
+  await shot('annotate', w, { list: '#listWrap', where: '.where', card: '.ann', slides: byText('#tagsL1 button', 'Screen'), l1: '#secL1' });
+  tag(1, 'Screen');
+  await shot('l1Picked', w, { l1: '#secL1', slides: byText('#tagsL1 button', 'Screen'), pill: '#curStatus' });
+  key('d'); await sleep(150);
+  await shot('gaze101', w, { laptop: byText('#tagsL1 button', 'Device-Laptop'), l2: '#secL2' });
+  tag(1, 'Device-Laptop');
+  await shot('deviceL2', w, { laptop: byText('#tagsL1 button', 'Device-Laptop'), l2: '#secL2', notesTag: byText('#tagsL2 button', 'On-task') });
+  tag(2, 'On-task'); tag(3, 'Small group');
+  await shot('l2l3', w, { l2: '#secL2', l3: '#secL3', pill: '#curStatus', both: (d) => [d.getElementById('secL2'), d.getElementById('secL3')] });
+  key('d'); await sleep(150); key('u'); await sleep(150);
+  await shot('unsure', w, { unsure: '#btnUnsure', pill: '#curStatus', item: li(2), l3: '#secL3' });
+  key('d'); await sleep(150); tag(1, 'Person-Instructor');
+  const notes = $('notes'); notes.focus(); notes.value = 'Someone walks in front of the screen'; notes.dispatchEvent(new w.Event('input', { bubbles: true })); notes.blur();
+  await shot('notes', w, { notes: '#notes', clear: '#btnClearGaze', row: (d) => d.querySelector('.flagrow') });
+  const quick = [['Device-Phone', 'Off-task'], ['Screen'], ['Screen'], ['Off'], ['Person-Peer'], ['Screen']];
+  for (const q of quick) { key('d'); await sleep(80); tag(1, q[0]); if (q[1]) tag(2, q[1]); }
+  key('d'); await sleep(150);
+  await shot('navigate', w, { nav: '#navMain', list: '#listWrap', foot: '.foot', from: li(10), to: li(17) });
+  mouse('mousedown', w.document.querySelector('#list li[data-i="10"]'));
+  mouse('mouseover', w.document.querySelector('#list li[data-i="14"]'));
+  mouse('mouseover', w.document.querySelector('#list li[data-i="17"]')); mouse('mouseup', w.document); await sleep(150);
+  await shot('bulkSel', w, { sel: '#list li.sel', where: '.where', slides: byText('#tagsL1 button', 'Screen') });
+  tag(1, 'Screen');
+  await shot('bulkDone', w, { l1: '#secL1', sel: '#list li.sel', btns: '#batchBtns', slides: byText('#tagsL1 button', 'Screen') });
+  key('Escape'); await sleep(200);
+  await shot('unsaved', w, { saved: '#saved', save: '#btnSave', both: (d) => [d.getElementById('saved'), d.getElementById('btnSave'), d.getElementById('btnSaveAs')] });
+  $('btnSave').click(); await sleep(400);
+  await shot('saved', w, { saved: '#saved', save: '#btnSave' });
+  $('btnSetup').click(); await sleep(200);
+  await shot('resume', w, { open: '#btnOpen', card: (d) => d.getElementById('btnOpen').closest('.card') });
+  $('btnAnnotate').click(); await sleep(200); openGaze(16); await sleep(150);
+  // what the extension would say; posted from inside the app page, as the real extension's script does
+  w.eval("window.postMessage({ source: 'gaze-pupil-ext', type: 'hello', version: '1.1' }, '*')"); await sleep(150);
+  $('syncPupil').click(); await sleep(300);
+  w.eval("window.postMessage({ source: 'gaze-pupil-ext', type: 'result', req: 'goto', ok: true, method: 'typed', fixation: 116 }, '*')"); await sleep(200);
+  await shot('synced', w, { sync: (d) => [d.getElementById('syncWrap'), d.getElementById('syncState')], where: '.where' });
+
+  // --- the combine tool
+  w = await openFrame('/combine_sessions.html');
+  const mk = (pid, n, first) => {
+    const tags = ['Screen', 'Person-Instructor', 'Device-Laptop', 'Off', 'Screen', 'Device-Paper'];
+    const rows = Array.from({ length: n }, (_, i) => [pid, i < n / 2 ? 1 : 2, first + i, i % 9 === 8 ? '' : tags[i % tags.length], tags[i % tags.length].startsWith('Device') ? 'On-task' : '', '', i % 11 === 5 ? 'Y' : 'N', '']);
+    return new File(['Participant_ID,Prompt_Number,Gaze_Number,L1_Gaze_Location,L2_Gaze_Location,L3_Gaze_Context,Unsure,Notes\r\n' + rows.map((r) => r.join(',')).join('\r\n')],
+      'STUDY_10-09_P' + pid + '_Gaze_Annotation.csv');
+  };
+  await w.__combine.addFiles([mk('32', 74, 210), mk('31', 81, 100), mk('33', 66, 330)]);
+  await shot('combine', w, { table: 'table', actions: '.actions', drop: '#drop', xlsx: '#btnXlsx' });
+
+  // --- Pupil Cloud's Manual Mapper (the mock that copies its panel), on fixation 116
+  w = await openFrame('/test/mock_pupil.html');
+  w.document.getElementById('shown').style.display = 'none';
+  const pin = w.document.querySelector('input');
+  Object.getOwnPropertyDescriptor(w.HTMLInputElement.prototype, 'value').set.call(pin, '116');
+  pin.dispatchEvent(new w.Event('input', { bubbles: true })); await sleep(60);
+  pin.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await sleep(200);
+  await shot('pupil', w, { panel: '.panel' });
+  stage.textContent = '';
+
+  // ------------------------------------------------------------------ drawing helpers
+  const canvas = document.getElementById('preview'); const ctx = canvas.getContext('2d');
+  const FONT = '"Segoe UI", system-ui, -apple-system, Roboto, sans-serif';
+  const COL = { accent: '#2457d6', blue: '#0b8fd3', green: '#1f9d55', amber: '#d99a00', ink: '#1d2433', muted: '#667085' };
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const ease = (x) => { x = clamp(x, 0, 1); return x < .5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; };
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const font = (size, weight) => (weight || 400) + ' ' + size + 'px ' + FONT;
+
+  function viewFor(shotObj, focus, zoom) {   // view rect (in source px) zoomed towards a CSS rect
+    const sw = 1280 * SRC_SCALE, sh = 720 * SRC_SCALE;
+    if (!focus || zoom <= 1) return { x: 0, y: 0, w: sw, h: sh };
+    const vw = sw / zoom, vh = sh / zoom, cx = (focus.x + focus.w / 2) * SRC_SCALE, cy = (focus.y + focus.h / 2) * SRC_SCALE;
+    return { x: clamp(cx - vw / 2, 0, sw - vw), y: clamp(cy - vh / 2, 0, sh - vh), w: vw, h: vh };
+  }
+  const mixView = (a, b, k) => ({ x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), w: lerp(a.w, b.w, k), h: lerp(a.h, b.h, k) });
+  function toScreen(view, r, box) {   // CSS rect -> canvas rect, inside box {x,y,w,h} (default: full canvas)
+    box = box || { x: 0, y: 0, w: W, h: H };
+    const sx = box.w / view.w, sy = box.h / view.h;
+    return { x: box.x + (r.x * SRC_SCALE - view.x) * sx, y: box.y + (r.y * SRC_SCALE - view.y) * sy, w: r.w * SRC_SCALE * sx, h: r.h * SRC_SCALE * sy };
+  }
+  function drawShot(s, view, box) {
+    box = box || { x: 0, y: 0, w: W, h: H };
+    ctx.drawImage(s.img, view.x, view.y, view.w, view.h, box.x, box.y, box.w, box.h);
+  }
+  function highlight(r, alpha, color) {
+    if (!r || alpha <= 0) return;
+    const pad = 6;
+    ctx.save(); ctx.globalAlpha = alpha;
+    ctx.shadowColor = color || COL.accent; ctx.shadowBlur = 18;
+    ctx.strokeStyle = color || COL.accent; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.roundRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 10); ctx.stroke();
+    ctx.restore();
+  }
+  function spotlight(rects, alpha) {   // dim everything except the highlighted areas
+    if (alpha <= 0) return;
+    ctx.save(); ctx.globalAlpha = 0.32 * alpha; ctx.fillStyle = '#0b1020';
+    ctx.beginPath(); ctx.rect(0, 0, W, H);
+    for (const r of rects) if (r) ctx.roundRect(r.x - 8, r.y - 8, r.w + 16, r.h + 16, 12);
+    ctx.fill('evenodd'); ctx.restore();
+  }
+  function cursor(x, y, pressed) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(1.25, 1.25);
+    ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 22); ctx.lineTo(6, 16.5); ctx.lineTo(10, 25); ctx.lineTo(13.5, 23.5); ctx.lineTo(9.5, 15); ctx.lineTo(17, 15); ctx.closePath();
+    ctx.fillStyle = pressed ? '#e8eefc' : '#fff'; ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.6; ctx.strokeStyle = '#111'; ctx.stroke(); ctx.restore();
+  }
+  function ripple(x, y, k) {
+    if (k <= 0 || k >= 1) return;
+    ctx.save(); ctx.globalAlpha = 1 - k; ctx.strokeStyle = COL.accent; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, 8 + 34 * k, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  }
+  function keycap(label, x, y, hot) {
+    ctx.save(); ctx.font = font(24, 600);
+    const w = Math.max(48, ctx.measureText(label).width + 28), h = 50;
+    ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 4;
+    ctx.fillStyle = hot ? COL.accent : '#fff'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.strokeStyle = hot ? COL.accent : '#c8cfdb'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = hot ? '#fff' : COL.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, x + w / 2, y + h / 2 + 1);
+    ctx.restore(); return w;
+  }
+  function wrapText(text, x, y, maxW, lineH) {
+    const words = text.split(' '); let line = '', yy = y;
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, yy); line = word; yy += lineH; } else line = test;
+    }
+    if (line) ctx.fillText(line, x, yy);
+    return yy + lineH;
+  }
+  function caption(sc, t) {
+    const a = ease((t - 0.2) / 0.5);
+    if (a <= 0) return;
+    ctx.save(); ctx.globalAlpha = a;
+    const x = 36, w = W - 72, h = 112, y = sc.capTop ? 24 : H - h - 24;
+    ctx.fillStyle = 'rgba(14,20,36,.88)'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 16); ctx.fill();
+    ctx.fillStyle = '#7fa6ff'; ctx.font = font(15, 700); ctx.fillText((sc.chapter || '').toUpperCase(), x + 26, y + 30);
+    ctx.fillStyle = '#fff'; ctx.font = font(27, 700); ctx.fillText(sc.title, x + 26, y + 64);
+    ctx.fillStyle = '#d5dbe7'; ctx.font = font(19, 400); wrapText(sc.text, x + 26, y + 94, w - 52, 24);
+    ctx.restore();
+  }
+  function background(c1, c2) {
+    const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, c1 || '#0f1a3a'); g.addColorStop(1, c2 || '#1d3c8f');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
+  // ------------------------------------------------------------------ scenes
+  // A shot scene: image (optionally switching to imgAfter at `swap`), slow zoom to `focus`,
+  // highlights, an optional cursor that moves to `click` and clicks at `clickAt`, caption.
+  function shotScene(sc) {
+    return (t) => {
+      const before = shots[sc.img], after = shots[sc.after || sc.img];
+      const s = sc.after && t >= sc.swap ? after : before;
+      const k = ease(t / 4.5);   // the slow zoom settles after 4.5 s
+      const view = mixView(viewFor(s, null, 1), viewFor(s, s.rects[sc.focus], sc.zoom || 1), k);
+      drawShot(s, view);
+      const hlA = ease((t - (sc.hlAt || 1.0)) / 0.5);
+      const hl = (sc.hl || []).map((n) => s.rects[n] && toScreen(view, s.rects[n]));
+      if (sc.spot) spotlight(hl, hlA);
+      hl.forEach((r) => highlight(r, hlA, sc.hlColor));
+      if (sc.click) {
+        const target = toScreen(view, (shots[sc.img].rects[sc.click]));
+        const tx = target.x + target.w * 0.55, ty = target.y + target.h * 0.6;
+        const fx = sc.from ? sc.from[0] : W * 0.62, fy = sc.from ? sc.from[1] : H * 0.62;
+        const m = ease((t - 0.6) / 0.9), x = lerp(fx, tx, m), y = lerp(fy, ty, m);
+        ripple(tx, ty, (t - sc.clickAt) / 0.6);
+        cursor(x, y, t > sc.clickAt && t < sc.clickAt + 0.25);
+      }
+      if (sc.drag) {   // press on one list item, drag to another
+        const a = toScreen(view, s.rects[sc.drag[0]] || shots[sc.img].rects[sc.drag[0]]), b = toScreen(view, shots[sc.img].rects[sc.drag[1]]);
+        const ax = a.x + 40, ay = a.y + a.h / 2, bx = b.x + 40, by = b.y + b.h / 2;
+        const m1 = ease((t - 0.5) / 0.7), m2 = ease((t - 1.5) / 1.2);
+        const x = t < 1.5 ? lerp(W * 0.5, ax, m1) : lerp(ax, bx, m2), y = t < 1.5 ? lerp(H * 0.45, ay, m1) : lerp(ay, by, m2);
+        if (t > 1.4 && t < sc.swap) {   // growing band while dragging
+          ctx.save(); ctx.fillStyle = 'rgba(36,87,214,.25)'; ctx.fillRect(a.x, ay - a.h / 2, a.w, (y - ay) + a.h); ctx.restore();
+        }
+        cursor(x, y, t > 1.4 && t < 2.8);
+      }
+      if (sc.keys) {
+        const a = ease((t - (sc.keysAt || 1.2)) / 0.4);
+        if (a > 0) {
+          ctx.save(); ctx.globalAlpha = a;
+          let x = sc.keys.x, y = sc.keys.y;
+          for (const group of sc.keys.groups) {
+            ctx.font = font(18, 600); ctx.fillStyle = sc.keys.labelColor || COL.ink;
+            if (group.label) { ctx.fillText(group.label, x, y - 12); }
+            let gx = x;
+            group.caps.forEach((c, i) => { const hot = Math.floor((t - 1.2) / 0.6) % group.caps.length === i; gx += keycap(c, gx, y, hot) + 10; });
+            x = gx + 34;
+          }
+          ctx.restore();
+        }
+      }
+      if (sc.extra) sc.extra(t, view);
+      caption(sc, t);
+    };
+  }
+
+  function titleCard(t) {
+    background('#0d1733', '#2457d6');
+    const a = ease(t / 0.8);
+    ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+    ctx.font = font(76, 800); ctx.fillText('Gaze Annotator', W / 2, H / 2 - 30);
+    ctx.font = font(28, 400); ctx.fillStyle = '#d7e2ff';
+    ctx.fillText('A short tour: set up, code gazes, save and resume,', W / 2, H / 2 + 34);
+    ctx.fillText('combine files, and sync with Pupil Cloud', W / 2, H / 2 + 72);
+    ctx.restore();
+  }
+  function listCard(head, sub, items, t) {
+    background('#0d1733', '#1d3c8f');
+    ctx.save(); ctx.fillStyle = '#fff'; ctx.font = font(44, 800); ctx.fillText(head, 110, 140);
+    ctx.font = font(22, 400); ctx.fillStyle = '#c9d6ff'; ctx.fillText(sub, 110, 182);
+    items.forEach((it, i) => {
+      const a = ease((t - 0.5 - i * 0.45) / 0.5); if (a <= 0) return;
+      const y = 250 + i * 92;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.beginPath(); ctx.roundRect(100, y - 40, W - 200, 76, 14); ctx.fill();
+      ctx.fillStyle = it.color || '#7fa6ff'; ctx.beginPath(); ctx.roundRect(124, y - 22, 40, 40, 9); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = font(20, 700); ctx.textAlign = 'center'; ctx.fillText(it.icon, 144, y + 5); ctx.textAlign = 'left';
+      ctx.font = font(25, 700); ctx.fillText(it.name, 188, y - 2);
+      ctx.font = font(19, 400); ctx.fillStyle = '#c9d6ff'; ctx.fillText(it.desc, 188, y + 25);
+    });
+    ctx.restore();
+  }
+  function saveDialogScene(t) {
+    const s = shots.setupFilled; drawShot(s, viewFor(s, null, 1));
+    const a = ease((t - 0.3) / 0.5);
+    ctx.save(); ctx.globalAlpha = 0.45 * a; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore();
+    if (a > 0) {
+      ctx.save(); ctx.globalAlpha = a;
+      const dw = 720, dh = 380, dx = (W - dw) / 2, dy = 110;
+      ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 30; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(dx, dy, dw, dh, 12); ctx.fill(); ctx.shadowColor = 'transparent';
+      ctx.fillStyle = '#f3f5f9'; ctx.beginPath(); ctx.roundRect(dx, dy, dw, 46, [12, 12, 0, 0]); ctx.fill();
+      ctx.fillStyle = COL.ink; ctx.font = font(18, 600); ctx.fillText('Save As', dx + 20, dy + 30);
+      ctx.fillStyle = '#f7f8fb'; ctx.fillRect(dx, dy + 46, 190, dh - 46 - 70);
+      ['Desktop', 'Documents', 'Downloads', 'Gaze annotation'].forEach((n, i) => {
+        const y = dy + 82 + i * 40, on = i === 3;
+        if (on) { ctx.fillStyle = '#dfe8ff'; ctx.beginPath(); ctx.roundRect(dx + 10, y - 24, 170, 34, 6); ctx.fill(); }
+        ctx.fillStyle = on ? COL.accent : COL.ink; ctx.font = font(16, on ? 700 : 400); ctx.fillText('📁  ' + n, dx + 22, y);
+      });
+      ctx.fillStyle = COL.muted; ctx.font = font(15, 400); ctx.fillText('This folder is empty.', dx + 220, dy + 90);
+      const fy = dy + dh - 112;
+      ctx.fillStyle = COL.ink; ctx.font = font(16, 400); ctx.fillText('File name:', dx + 22, fy + 26);
+      ctx.strokeStyle = COL.accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(dx + 120, fy + 4, dw - 142, 36, 6); ctx.stroke();
+      ctx.fillStyle = COL.ink; ctx.font = font(17, 600); ctx.fillText('STUDY_10-09_P31_Gaze_Annotation.csv', dx + 134, fy + 28);
+      ctx.fillStyle = COL.accent; ctx.beginPath(); ctx.roundRect(dx + dw - 230, dy + dh - 56, 100, 38, 8); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = font(17, 600); ctx.textAlign = 'center'; ctx.fillText('Save', dx + dw - 180, dy + dh - 31);
+      ctx.strokeStyle = '#c8cfdb'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(dx + dw - 120, dy + dh - 56, 100, 38, 8); ctx.stroke();
+      ctx.fillStyle = COL.ink; ctx.fillText('Cancel', dx + dw - 70, dy + dh - 31); ctx.textAlign = 'left';
+      ctx.restore();
+      const tx = dx + dw - 175, ty = dy + dh - 34, m = ease((t - 1.6) / 1.0);
+      ripple(tx, ty, (t - 3.0) / 0.6); cursor(lerp(W * 0.3, tx, m), lerp(H * 0.75, ty, m), t > 3 && t < 3.25);
+    }
+    caption({ chapter: '1 · Set up a session', title: 'Choose where to save — only the first time',
+      text: 'Click Start annotating. Chrome suggests the name (session date + participant); pick a folder and click Save.' }, t);
+  }
+  function extensionScene(t) {
+    background('#eef2f8', '#dfe6f2');
+    // a simplified Chrome extensions page
+    const x = 300, y = 40, w = 940, h = 520;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 24; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fill(); ctx.restore();
+    ctx.fillStyle = '#e9edf3'; ctx.beginPath(); ctx.roundRect(x, y, w, 50, [14, 14, 0, 0]); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x + 20, y + 10, w - 40, 30, 15); ctx.fill();
+    ctx.fillStyle = COL.ink; ctx.font = font(16, 500); ctx.fillText('chrome://extensions', x + 40, y + 31);
+    ctx.font = font(26, 600); ctx.fillText('Extensions', x + 30, y + 98);
+    const step = t < 3.5 ? 0 : t < 7 ? 1 : t < 10.5 ? 2 : 3;
+    // developer mode toggle
+    const dmOn = t > 1.8, tgX = x + w - 90, tgY = y + 76;
+    ctx.font = font(16, 400); ctx.fillStyle = COL.ink; ctx.textAlign = 'right'; ctx.fillText('Developer mode', tgX - 14, tgY + 18); ctx.textAlign = 'left';
+    const toggle = (cx, cy, on) => {
+      ctx.fillStyle = on ? '#8ab4f8' : '#c5cbd5'; ctx.beginPath(); ctx.roundRect(cx, cy + 4, 46, 18, 9); ctx.fill();
+      ctx.fillStyle = on ? COL.accent : '#fff'; ctx.beginPath(); ctx.arc(on ? cx + 34 : cx + 12, cy + 13, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.15)'; ctx.lineWidth = 1; ctx.stroke();
+    };
+    toggle(tgX, tgY, dmOn);
+    if (dmOn) {   // buttons appear
+      ['Load unpacked', 'Pack extension', 'Update'].forEach((b, i) => {
+        const bx = x + 30 + i * 170, by = y + 124;
+        ctx.strokeStyle = i === 0 && step === 1 ? COL.accent : '#c8cfdb'; ctx.lineWidth = i === 0 && step === 1 ? 3 : 1.5;
+        ctx.beginPath(); ctx.roundRect(bx, by, 156, 38, 8); ctx.stroke();
+        ctx.fillStyle = COL.accent; ctx.font = font(16, 600); ctx.textAlign = 'center'; ctx.fillText(b, bx + 78, by + 25); ctx.textAlign = 'left';
+      });
+    }
+    if (t > 5.2) {   // the extension card
+      const cx = x + 30, cy = y + 190, a = ease((t - 5.2) / 0.5);
+      ctx.save(); ctx.globalAlpha = a;
+      ctx.strokeStyle = '#dde2ea'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(cx, cy, 420, 150, 10); ctx.stroke();
+      ctx.fillStyle = COL.accent; ctx.beginPath(); ctx.roundRect(cx + 18, cy + 18, 44, 44, 10); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = font(22, 800); ctx.textAlign = 'center'; ctx.fillText('G', cx + 40, cy + 48); ctx.textAlign = 'left';
+      ctx.fillStyle = COL.ink; ctx.font = font(17, 700); ctx.fillText('Gaze Annotator - Pupil Cloud Sync', cx + 76, cy + 36);
+      ctx.fillStyle = COL.muted; ctx.font = font(14, 400); ctx.fillText('1.1  ·  Moves Pupil Cloud’s Manual Mapper to your fixation', cx + 76, cy + 58);
+      ctx.strokeStyle = step === 2 ? COL.accent : '#c8cfdb'; ctx.lineWidth = step === 2 ? 3 : 1.5; ctx.beginPath(); ctx.roundRect(cx + 18, cy + 98, 90, 34, 8); ctx.stroke();
+      ctx.fillStyle = COL.accent; ctx.font = font(15, 600); ctx.fillText('Details', cx + 38, cy + 120);
+      ctx.fillText('Remove', cx + 130, cy + 120); toggle(cx + 350, cy + 100, true);
+      ctx.restore();
+    }
+    if (t > 8.8) {   // details panel with the file URL switch
+      const px = x + 480, py = y + 190, a = ease((t - 8.8) / 0.5), on = t > 12;
+      ctx.save(); ctx.globalAlpha = a;
+      ctx.fillStyle = '#f7f9fc'; ctx.beginPath(); ctx.roundRect(px, py, 430, 290, 10); ctx.fill();
+      ctx.fillStyle = COL.ink; ctx.font = font(17, 700); ctx.fillText('Details', px + 20, py + 34);
+      ['Site access', 'Allow in Incognito', 'Allow access to file URLs'].forEach((lab, i) => {
+        const ly = py + 90 + i * 64, hot = i === 2;
+        if (hot && step === 3) { ctx.strokeStyle = COL.accent; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(px + 10, ly - 30, 410, 50, 8); ctx.stroke(); }
+        ctx.fillStyle = COL.ink; ctx.font = font(16, hot ? 700 : 400); ctx.fillText(lab, px + 24, ly);
+        if (i > 0) toggle(px + 360, ly - 20, hot ? on : false);
+      });
+      ctx.restore();
+    }
+    // the four steps on the left
+    const steps = ['Open chrome://extensions and switch on Developer mode', 'Click Load unpacked, choose the pupil-sync-extension folder', 'Find the card and click Details',
+      'Switch on Allow access to file URLs'];
+    steps.forEach((s, i) => {
+      const yy = 90 + i * 110, on = i === step, done = i < step;
+      ctx.fillStyle = on ? COL.accent : done ? COL.green : '#9aa5b8'; ctx.beginPath(); ctx.arc(60, yy, 20, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = font(19, 700); ctx.textAlign = 'center'; ctx.fillText(done ? '✓' : String(i + 1), 60, yy + 7); ctx.textAlign = 'left';
+      ctx.fillStyle = on ? COL.ink : '#5a6478'; ctx.font = font(17, on ? 700 : 400); wrapText(s, 92, yy - 6, 190, 22);
+    });
+    // cursor follows the current step
+    const targets = [[tgX + 30, tgY + 14], [x + 108, y + 143], [x + 92, y + 305], [x + 480 + 380, y + 190 + 218 - 8]];
+    const prevT = targets[Math.max(0, step - 1)], tt = targets[step], st = [0, 3.5, 7, 10.5][step];
+    const m = ease((t - st - 0.4) / 0.9);
+    ripple(tt[0], tt[1], (t - st - 1.5) / 0.6);
+    cursor(lerp(prevT[0], tt[0], m), lerp(prevT[1], tt[1], m), t - st > 1.5 && t - st < 1.75);
+    caption({ chapter: '6 · Optional: sync with Pupil Cloud', title: 'Install the sync extension once (about 2 minutes)',
+      text: 'In Chrome: Developer mode → Load unpacked → pupil-sync-extension → Details → Allow access to file URLs. Keep that folder where it is.' }, t);
+  }
+  function syncScene(t) {
+    background('#0d1733', '#1d3c8f');
+    const app = shots.synced, pup = shots.pupil;
+    const box = { x: 30, y: 60, w: 830, h: 467 };
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 24; ctx.fillStyle = '#fff'; ctx.fillRect(box.x, box.y, box.w, box.h); ctx.restore();
+    const view = viewFor(app, null, 1); drawShot(app, view, box);
+    const syncR = toScreen(view, app.rects.sync, box);
+    highlight(syncR, ease((t - 1) / 0.5), COL.green);
+    // Pupil panel (crop of the mock)
+    const pr = pup.rects.panel, pv = { x: (pr.x - 16) * SRC_SCALE, y: (pr.y - 16) * SRC_SCALE, w: (pr.w + 32) * SRC_SCALE, h: (pr.h + 32) * SRC_SCALE };
+    const pw = 340, ph = pw * pv.h / pv.w, pbox = { x: 900, y: 120, w: pw, h: ph };
+    ctx.fillStyle = '#fff'; ctx.font = font(18, 700); ctx.fillText('Pupil Cloud · Manual Mapper', 900, 106);
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 24; ctx.drawImage(pup.img, pv.x, pv.y, pv.w, pv.h, pbox.x, pbox.y, pbox.w, pbox.h); ctx.restore();
+    const ia = ease((t - 1.3) / 0.5);
+    if (ia > 0) {   // enlarged inset of the app's footer so the status is readable
+      const sr = app.rects.sync, src = { x: (sr.x - 14) * SRC_SCALE, y: (sr.y - 10) * SRC_SCALE, w: (sr.w + 28) * SRC_SCALE, h: (sr.h + 20) * SRC_SCALE };
+      const iw = 340, ih = iw * src.h / src.w, ib = { x: 900, y: pbox.y + ph + 40, w: iw, h: ih };
+      ctx.save(); ctx.globalAlpha = ia;
+      ctx.fillStyle = '#fff'; ctx.font = font(18, 700); ctx.fillText('The app’s footer', ib.x, ib.y - 12);
+      ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 20; ctx.drawImage(app.img, src.x, src.y, src.w, src.h, ib.x, ib.y, ib.w, ib.h);
+      ctx.shadowColor = 'transparent'; ctx.strokeStyle = COL.green; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(ib.x - 3, ib.y - 3, ib.w + 6, ib.h + 6, 8); ctx.stroke();
+      ctx.restore();
+    }
+    const a = ease((t - 2) / 0.6);
+    if (a > 0) {   // arrow from the app's sync status to Pupil's fixation box
+      ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = '#7fe0a6'; ctx.fillStyle = '#7fe0a6'; ctx.lineWidth = 4; ctx.setLineDash([10, 8]);
+      const sx = syncR.x + syncR.w, sy = syncR.y + syncR.h / 2, ex = pbox.x - 6, ey = pbox.y + ph * 0.42;
+      ctx.beginPath(); ctx.moveTo(sx + 8, sy); ctx.bezierCurveTo(sx + 120, sy, ex - 120, ey, ex, ey); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - 16, ey - 9); ctx.lineTo(ex - 16, ey + 9); ctx.closePath(); ctx.fill();
+      ctx.font = font(18, 700); ctx.fillText('same fixation: 116', (sx + ex) / 2 - 60, (sy + ey) / 2 - 18);
+      ctx.restore();
+    }
+    caption({ chapter: '6 · Optional: sync with Pupil Cloud', title: 'Tick Sync Pupil — Pupil follows the app',
+      text: 'Open the recording’s Manual Mapper in Chrome. Each time you move to a gaze, Pupil jumps to the same fixation; the footer confirms it.' }, t);
+  }
+
+  const scenes = [
+    { dur: 5, draw: titleCard },
+    { dur: 8, draw: (t) => listCard('What’s in the folder', 'Unzip it first. Use Chrome or Edge. No install, no internet needed.', [
+      { icon: '✎', name: 'gaze_annotator.html', desc: 'the annotation app — double-click to open' },
+      { icon: '⧉', name: 'combine_sessions.html', desc: 'merges participant files into one workbook', color: '#5fb3ff' },
+      { icon: '?', name: 'Rater Guide.html', desc: 'the full written guide', color: '#7fd0a0' },
+      { icon: '⇄', name: 'pupil-sync-extension', desc: 'optional: keeps Pupil Cloud on the same fixation', color: '#c39bff' }], t) },
+    { dur: 6.5, draw: shotScene({ img: 'setupEmpty', chapter: '1 · Set up a session', title: 'Open gaze_annotator.html',
+      text: 'It opens in Chrome on the Setup screen. The tag dictionary is already built in — nothing to load.', hl: ['dict'], hlColor: COL.green }) },
+    { dur: 8, draw: shotScene({ img: 'setupFilled', chapter: '1 · Set up a session', title: 'Participant, session date and gaze ranges',
+      text: 'Type just the participant number (31) and the day of the recording, not today. Give each prompt its first and last gaze number.',
+      focus: 'left', zoom: 1.2, hl: ['pid', 'date', 'prompts'], spot: true }) },
+    { dur: 6.5, draw: saveDialogScene },
+    { dur: 6.5, draw: shotScene({ img: 'annotate', chapter: '2 · Code each gaze', title: 'One gaze at a time',
+      text: 'The list on the left shows every gaze of the session. The card shows the gaze you are coding.', hl: ['list', 'where'], spot: true }) },
+    { dur: 7, draw: shotScene({ img: 'annotate', after: 'l1Picked', swap: 1.65, chapter: '2 · Code each gaze', title: 'Pick the L1 gaze location',
+      text: 'Hover over a tag to read its definition; click it again to undo. The status turns green: complete.', focus: 'l1', zoom: 1.45,
+      click: 'slides', clickAt: 1.6, hl: ['l1'], hlAt: 2.4 }) },
+    { dur: 7, draw: shotScene({ img: 'gaze101', after: 'deviceL2', swap: 1.65, chapter: '2 · Code each gaze', title: 'Device tags open L2',
+      text: 'Tags marked ▸ are devices. Pick one and the L2 device-activity buttons become available.', focus: 'l2', zoom: 1.35,
+      click: 'laptop', clickAt: 1.6, hl: ['l2'], hlAt: 2.4, hlColor: '#7a3fd1' }) },
+    { dur: 7, draw: shotScene({ img: 'l2l3', chapter: '2 · Code each gaze', title: 'L3 context is optional',
+      text: 'Context tags (here: whole group, small group, individual work) can be coded now or in a second round. They carry over to the next gaze in the prompt.',
+      focus: 'both', zoom: 1.35, hl: ['l3', 'pill'] }) },
+    { dur: 7, draw: shotScene({ img: 'unsure', chapter: '2 · Code each gaze', title: 'Not sure? Flag it',
+      text: 'Press U or click Unsure. The gaze counts as done, but shows in blue so unsure items stand out.', focus: 'unsure', zoom: 1.25,
+      hl: ['unsure', 'pill', 'item'], hlColor: COL.blue }) },
+    { dur: 6.5, draw: shotScene({ img: 'notes', chapter: '2 · Code each gaze', title: 'Notes and Clear gaze',
+      text: 'Add an optional note. Clear gaze removes all codes from a gaze — and offers Undo clear right after.', focus: 'row', zoom: 1.5, hl: ['notes', 'clear'] }) },
+    { dur: 7.5, draw: shotScene({ img: 'navigate', chapter: '2 · Code each gaze', title: 'Move quickly',
+      text: 'A / D or the arrow keys go to the previous / next gaze. Next incomplete jumps to what is left; or click any gaze in the list.',
+      hl: ['nav'],
+      keys: { x: 330, y: 470, groups: [{ label: 'previous / next', caps: ['A', 'D'] }, { label: 'or', caps: ['←', '→'] }, { label: 'unsure', caps: ['U'] }] } }) },
+    { dur: 7.5, draw: shotScene({ img: 'navigate', after: 'bulkSel', swap: 2.85, chapter: '3 · Several gazes at once', title: 'Drag across gazes in the list',
+      text: 'Or click one and Shift+click another. The card now edits all of the selected gazes together.', drag: ['from', 'to'], hl: ['sel', 'where'], hlAt: 3.2 }) },
+    { dur: 7, draw: shotScene({ img: 'bulkSel', after: 'bulkDone', swap: 1.65, chapter: '3 · Several gazes at once', title: 'One click codes them all',
+      text: 'Tags, Unsure and notes go to every selected gaze. Undo reverts the last change; Done (Esc) moves on.',
+      click: 'slides', clickAt: 1.6, hl: ['sel', 'btns'], hlAt: 2.4 }) },
+    { dur: 7, draw: shotScene({ img: 'unsaved', chapter: '4 · Save, stop, resume', title: 'Save with Ctrl+S (Cmd+S on Mac)',
+      text: 'Amber “Unsaved changes” means it’s time to save. If you close the tab with unsaved work, the browser asks first.',
+      focus: 'both', zoom: 1.7, hl: ['both'], hlColor: COL.amber, capTop: false,
+      keys: { x: 520, y: 400, groups: [{ label: 'press together (Mac: Cmd + S)', caps: ['Ctrl', 'S'] }] }, keysAt: 2.2 }) },
+    { dur: 5.5, draw: shotScene({ img: 'saved', chapter: '4 · Save, stop, resume', title: 'Saved into your session file',
+      text: 'Every save goes into the same file. That file is what you keep, resume from and hand in.', focus: 'saved', zoom: 1.7, hl: ['saved'], hlColor: COL.green }) },
+    { dur: 7, draw: shotScene({ img: 'resume', chapter: '4 · Save, stop, resume', title: 'Coming back later — even on another computer',
+      text: 'Setup → Open saved session… and pick your file. Everything comes back, and Save keeps writing into that file.',
+      focus: 'card', zoom: 1.4, hl: ['open'] }) },
+    { dur: 8, draw: shotScene({ img: 'combine', chapter: '5 · Combine participants', title: 'combine_sessions.html',
+      text: 'Drag in the participant files of one session, then save one workbook with a tab per participant (P31, P32, …) or one CSV.',
+      focus: 'table', zoom: 1.3, hl: ['table', 'actions'], capTop: true }) },
+    { dur: 14, draw: extensionScene },
+    { dur: 9, draw: syncScene },
+    { dur: 7, draw: (t) => listCard('That’s it!', 'The full instructions are in Rater Guide.html.', [
+      { icon: 'S', name: 'Save often', desc: 'Ctrl+S / Cmd+S — your session file is your work', color: '#7fd0a0' },
+      { icon: '?', name: 'Unsure = blue', desc: 'flag it, move on, it still counts as done', color: '#5fb3ff' },
+      { icon: '≡', name: 'Drag to code several gazes', desc: 'one click codes the whole selection', color: '#c39bff' },
+      { icon: '⇄', name: 'Sync Pupil (optional)', desc: 'Pupil Cloud jumps to the same fixation', color: '#7fa6ff' }], t) }
+  ];
+  const starts = []; let total = 0;
+  for (const s of scenes) { starts.push(total); total += s.dur; }
+  log('scenes: ' + scenes.length + ', length ' + total.toFixed(1) + ' s');
+
+  const FADE = 0.45;
+  function renderAt(time) {
+    let i = starts.length - 1; while (i > 0 && starts[i] > time) i--;
+    const t = time - starts[i];
+    ctx.save(); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore();
+    ctx.save(); ctx.globalAlpha = 1; scenes[i].draw(t); ctx.restore();
+    if (i > 0 && t < FADE) {   // short fade in from black at each scene change
+      ctx.save(); ctx.globalAlpha = 1 - ease(t / FADE); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore();
+    }
+    if (time > total - 0.8) { ctx.save(); ctx.globalAlpha = ease((time - (total - 0.8)) / 0.8); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+  }
+  window.__render = renderAt; window.__total = total; window.__starts = starts; window.__shots = shots; window.__dbg = { viewFor, mixView, drawShot, toScreen };
+
+  if (new URLSearchParams(location.search).has('preview')) { renderAt(0); window.__done = 'preview'; log('preview mode'); return; }
+
+  // ------------------------------------------------------------------ encode
+  const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: 'avc', width: W, height: H }, fastStart: 'in-memory' });
+  const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => log('encoder error ' + e.message) });
+  enc.configure({ codec: 'avc1.64001f', width: W, height: H, bitrate: 2500000, framerate: FPS });
+  const frames = Math.round(total * FPS);
+  for (let f = 0; f < frames; f++) {
+    renderAt(f / FPS);
+    // read the pixels: a frame taken from the canvas element itself can be stale when the page isn't on screen
+    const px = ctx.getImageData(0, 0, W, H);
+    const vf = new VideoFrame(px.data, { format: 'RGBA', codedWidth: W, codedHeight: H,
+      timestamp: Math.round(f * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+    enc.encode(vf, { keyFrame: f % (FPS * 2) === 0 }); vf.close();
+    if (enc.encodeQueueSize > 6) await new Promise((r) => enc.addEventListener('dequeue', r, { once: true }));
+    if (f % 150 === 0) log('frame ' + f + ' / ' + frames);
+  }
+  await enc.flush(); muxer.finalize();
+  const buf = muxer.target.buffer;
+  log('encoded ' + (buf.byteLength / 1e6).toFixed(1) + ' MB, saving...');
+  const res = await fetch('/save/GazeAnnotator_Guide.mp4', { method: 'POST', body: buf });
+  log(await res.text());
+  window.__done = true;
+})().catch((e) => { document.getElementById('log').textContent += '\nERROR ' + (e && e.stack || e); window.__done = 'error'; window.__status = String(e); });
+</script>
+</body>
+</html>
