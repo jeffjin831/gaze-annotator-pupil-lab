@@ -152,6 +152,30 @@
   .clearbtn:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
   textarea#notes { flex: 1; min-width: 0; height: 52px; resize: none; }
   .foot { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding-top: 8px; border-top: 1px solid var(--line); margin-top: auto; }
+  .linkbtn { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; }
+  .linkbtn:hover { text-decoration: underline; }
+
+  /* ---- playing a selected range in Pupil ---- */
+  #playWrap { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); }
+  #playSecs { width: 58px; padding: 4px 6px; }
+  #btnPlay.on { background: var(--unsure); border-color: var(--unsure); color: #ffffff; }
+  #list li.play { box-shadow: inset 4px 0 0 var(--unsure); font-weight: 700; }
+
+  /* ---- little messages and celebrations ---- */
+  #toast { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; z-index: 60;
+           background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 99px; font-size: 13.5px; font-weight: 600;
+           box-shadow: 0 6px 24px rgba(0, 0, 0, .25); transition: opacity .2s, transform .2s; max-width: calc(100vw - 32px); text-align: center; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  canvas.confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 55; }
+
+  /* ---- setup tip for Pupil sync ---- */
+  #tipDlg { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); padding: 18px 20px; max-width: 480px; width: calc(100vw - 32px); }
+  #tipDlg::backdrop { background: rgba(10, 14, 22, .45); }
+  #tipDlg h2 { font-size: 16px; margin: 0 0 10px; }
+  #tipDlg ol { margin: 0 0 10px; padding-left: 20px; }
+  #tipDlg li { margin: 6px 0; }
+  #tipDlg .tip-warn { background: var(--warn-bg); border-radius: 8px; padding: 7px 10px; margin: 0 0 10px; }
+  #tipDlg .dlgfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
 
   @media (max-width: 860px) {
     header h1 { display: none; }
@@ -256,6 +280,10 @@
           <span class="status-pill" id="curStatus"></span>
         </div>
         <div class="navbtns hidden" id="batchBtns">
+          <span id="playWrap" class="hidden" title="Show the selected gazes in Pupil Cloud one after another (Space plays / pauses, Esc stops)">
+            <button class="btn" id="btnPlay">&#9654; Play</button>
+            every <input type="number" id="playSecs" min="0.3" max="10" step="0.5" aria-label="Seconds per gaze"> s
+          </span>
           <button class="btn" id="btnUndo" title="Undo the last change to the selected gazes">Undo</button>
           <button class="btn primary" id="btnDone" title="Finish and go to the gaze after the selection (Esc)">Done <kbd>Esc</kbd></button>
         </div>
@@ -294,12 +322,31 @@
         <label title="Turn on when coding L3 (e.g. in a second round): progress and Next incomplete then also count gazes missing L3"><input type="checkbox" id="requireL3"> Require L3</label>
         <label id="syncWrap" class="hidden" title="Moves Pupil Cloud's Manual Mapper to the same fixation as the gaze you are coding (needs the Pupil sync extension and a Pupil Cloud tab with the Manual Mapper open)"><input type="checkbox" id="syncPupil"> Sync Pupil</label>
         <span id="syncState" class="syncstate"></span>
+        <button type="button" class="linkbtn" id="btnTip">Sync tips</button>
         <span class="spacer"></span>
-        <span title="Shortcuts are off while you type in Notes"><kbd>A</kbd>/<kbd>D</kbd> or <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> move &middot; <kbd>U</kbd> unsure &middot; <kbd>Ctrl/&#8984;+S</kbd> save &middot; drag in list = several gazes</span>
+        <span title="Shortcuts are off while you type in Notes"><kbd>A</kbd>/<kbd>D</kbd> or <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> move &middot; <kbd>B</kbd> back to first unmarked &middot; <kbd>U</kbd> unsure &middot; <kbd>Ctrl/&#8984;+S</kbd> save &middot; drag in list = several gazes (<kbd>Space</kbd> plays them in Pupil)</span>
       </div>
     </div>
   </div>
 </main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<dialog id="tipDlg" aria-labelledby="tipTitle">
+  <h2 id="tipTitle">Tip: set up for Pupil sync</h2>
+  <p id="tipBrowser" class="tip-warn small hidden">This looks like a browser other than Google Chrome. The Pupil sync extension only runs in Chrome, so open this file in Chrome to use it.</p>
+  <ol class="small">
+    <li><b>Use Google Chrome</b>, with the Pupil sync extension installed.</li>
+    <li><b>Put Pupil Cloud and this app side by side:</b> right-click the Pupil Cloud tab, choose the split view option
+      (for example <i>Add tab to new split view</i>), then pick this app's tab. You see the video and the tags together, and Pupil follows the gaze you are coding.</li>
+    <li><b>Click on this app's side before using the keys</b> (A, D, B, U, Space): keys go to whichever side you clicked last.</li>
+  </ol>
+  <p class="muted small">No split view option in your Chrome? Update Chrome, or drag the Pupil Cloud tab out into its own window and snap the two windows to the left and right halves of the screen.</p>
+  <div class="dlgfoot small">
+    <label><input type="checkbox" id="tipHide"> Don't show this again</label>
+    <button type="button" class="btn primary" id="tipOk">Got it</button>
+  </div>
+</dialog>
 
 <script>
 (function () {
@@ -704,7 +751,7 @@
   function setSel(i, j) {
     const a = Math.min(i, j), b = Math.max(i, j);
     if (a === b) { go(a); return; }
-    clearTimeout(advanceTimer);
+    stopPlay(); clearTimeout(advanceTimer);
     if (document.activeElement === $('notes')) $('notes').blur();
     const old = sel, wasIdx = S.idx; sel = { a, b }; undo = null; S.idx = b;
     refreshRange(old); updateListItem(wasIdx); renderCurrent();
@@ -713,7 +760,7 @@
     const lo = Math.min(old ? old.a : Infinity, sel ? sel.a : Infinity, S.idx), hi = Math.max(old ? old.b : -1, sel ? sel.b : -1, S.idx);
     for (let k = lo; k <= hi; k++) updateListItem(k);
   }
-  function dropSel() { if (!sel) return; const old = sel; sel = null; undo = null; refreshRange(old); }
+  function dropSel() { if (!sel) return; stopPlay(); const old = sel; sel = null; undo = null; refreshRange(old); }
   function snapshot() { undo = { a: sel.a, rows: selRows().map((r) => Object.assign({}, r)) }; $('btnUndo').disabled = false; }
   function bulkChanged() {
     S.dirty = true; save();
@@ -798,6 +845,7 @@
 
   function renderCurrent() {
     $('navMain').classList.toggle('hidden', !!sel); $('batchBtns').classList.toggle('hidden', !sel);
+    renderPlay();
     if (sel) { renderBulk(); return; }
     $('curPrompt').classList.remove('batch-note');
     $('notes').placeholder = 'Notes / feedback on this gaze (optional)';
@@ -833,7 +881,16 @@
     const pct = n ? Math.round((done / n) * 100) : 0;
     $('barFill').style.width = pct + '%';
     $('progressText').textContent = done + ' / ' + n + ' complete (' + pct + '%)';
+    // the moment the last gaze is coded (not when a finished session is opened), celebrate once
+    const all = n > 0 && done === n;
+    if (all && wasAllDone === false && !cheered.has(S.recording)) {
+      cheered.add(S.recording); confetti(170);
+      toast('All ' + n + ' gazes coded - great work! \u{1F389} Press Save to keep it.', 5000);
+    }
+    wasAllDone = all;
   }
+  let wasAllDone = null;          // null = not known yet (first render after loading or opening a file)
+  const cheered = new Set();      // participants already celebrated in this page visit
 
   function touch() {
     const r = cur(); r.t = new Date().toISOString();
@@ -842,7 +899,7 @@
 
   let advanceTimer = null;
   function pick(field, value) {
-    cleared = null;
+    cleared = null; stopPlay();
     if (sel) { bulkPick(field, value); return; }
     const r = cur();
     const selecting = r[field] !== value;
@@ -879,6 +936,20 @@
       if (!isDone(S.rows[i])) { go(i, i === S.idx + 1); return; }
     }
     alert('All gazes are complete.');
+  }
+  // B: back to the first gaze of the unmarked stretch behind you (e.g. you watched 100-105 without
+  // coding them and are now on 105: B goes to 100). Already at the start of a stretch? B goes on to
+  // the start of the stretch before it.
+  function backToUnmarked() {
+    if (!S.rows.length) return;
+    const open = (i) => !isDone(S.rows[i]);
+    const start = (i) => { while (i > 0 && open(i - 1)) i--; return i; };
+    let i = S.idx;
+    if (open(i) && start(i) < i) { go(start(i), false); return; }
+    i--;
+    while (i >= 0 && !open(i)) i--;
+    if (i < 0) { toast('No unmarked gazes before this one.'); return; }
+    go(start(i), false);
   }
   function jump() {
     const v = Number($('jump').value); if (!Number.isFinite(v) || $('jump').value === '') return;
@@ -959,7 +1030,7 @@
     try {
       if (!canPickFile) {
         const name = suggestedName(asNew ? '.xlsx' : '.csv');
-        download(fileBody(name), name); markSaved(name); return true;
+        download(fileBody(name), name); markSaved(name); cheerSave(); return true;
       }
       if (asNew || !fileHandle) {
         const h = await window.showSaveFilePicker({ suggestedName: asNew && fileHandle ? fileHandle.name : suggestedName(),
@@ -972,7 +1043,7 @@
       }
       const body = fileBody(fileHandle.name);
       const w = await fileHandle.createWritable(); await w.write(body); await w.close();
-      markSaved(fileHandle.name); return true;
+      markSaved(fileHandle.name); cheerSave(); return true;
     } catch (e) {
       if (e && e.name === 'AbortError') { renderFileStatus(); return false; }   // the rater closed the dialog
       alert('Could not save: ' + ((e && e.message) || e) + '\n\nIf the file is open in Excel, close it there and press Save again.');
@@ -1000,7 +1071,7 @@
     $('hdrProgress').classList.toggle('hidden', !S.rows.length);
     $('hdrSpacer').classList.toggle('hidden', !!S.rows.length);
     $('btnAnnotate').disabled = !S.rows.length;
-    if (ann) { go(S.idx, false); }
+    if (ann) { go(S.idx, false); maybeTip(); }
   }
   function renderAll() {
     [1, 2, 3].forEach((n) => { $('nameL' + n).textContent = colName(n).replace(/_/g, ' '); });
@@ -1008,6 +1079,8 @@
     $('autoAdvance').checked = !!S.autoAdvance;
     $('requireL3').checked = !!S.requireL3;
     $('syncPupil').checked = !!S.syncPupil;
+    $('playSecs').value = playSecs();
+    wasAllDone = null;   // a session just loaded is not a session just finished
     $('hintL3').textContent = (S.requireL3 ? 'required' : 'optional') + ' · carries over within a prompt';
     renderDictInfo(); renderPrompts(); renderList(); renderProgress(); renderFileStatus();
     if (!canPickFile) {
@@ -1060,6 +1133,7 @@
   let cleared = null;   // { i, row }: lets a one-gaze clear be undone until you move on or change it
   function clearGaze() {
     const blank = { l1: '', l2: '', l3: '', u: false, notes: '' };
+    stopPlay();
     if (sel) { snapshot(); const now = new Date().toISOString(); selRows().forEach((r) => Object.assign(r, blank, { t: now })); bulkChanged(); return; }
     const r = cur(); if (!r) return;
     if (cleared && cleared.i === S.idx) { S.rows[S.idx] = cleared.row; cleared = null; S.dirty = true; save(); renderCurrent(); updateListItem(S.idx); renderProgress(); return; }
@@ -1067,7 +1141,7 @@
     Object.assign(r, blank); $('notes').value = ''; touch();
   }
   $('btnClearGaze').addEventListener('click', clearGaze);
-  function toggleUnsure() { cleared = null; if (sel) { bulkUnsure(); return; } const r = cur(); if (!r) return; r.u = !r.u; touch(); }
+  function toggleUnsure() { cleared = null; stopPlay(); if (sel) { bulkUnsure(); return; } const r = cur(); if (!r) return; r.u = !r.u; touch(); }
   $('btnUndo').addEventListener('click', undoBulk);
   $('btnDone').addEventListener('click', finishSel);
   $('notes').addEventListener('focus', () => { if (sel) snapshot(); });
@@ -1096,12 +1170,13 @@
   });
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') { e.preventDefault(); saveSession(e.shiftKey); return; }
-    if ($('viewAnnotate').classList.contains('hidden')) return;
+    if ($('viewAnnotate').classList.contains('hidden') || $('tipDlg').open) return;
     // shortcuts are off while typing (notes, gaze #), so "a", "d", "u" can be typed normally
     const el = e.target, t = el.tagName;
     const typing = t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable ||
       (t === 'INPUT' && !['checkbox', 'radio', 'button'].includes(el.type));
     if (typing) { if (e.key === 'Escape') el.blur(); return; }
+    if (e.key === 'Escape' && play) { e.preventDefault(); stopPlay(); return; }   // first Esc stops playing, the next one finishes
     if (e.key === 'Escape' && sel) { e.preventDefault(); finishSel(); return; }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z' && sel && undo) { e.preventDefault(); undoBulk(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat && e.key.length === 1) return;
@@ -1109,6 +1184,11 @@
     if (k === 'ArrowRight' || k === 'd') { e.preventDefault(); next(); }
     else if (k === 'ArrowLeft' || k === 'a') { e.preventDefault(); prev(); }
     else if (k === 'u') { e.preventDefault(); toggleUnsure(); }
+    else if (k === 'b') { e.preventDefault(); backToUnmarked(); }
+    else if (k === ' ' && canPlay()) {
+      // blur first, or the focused button / checkbox would also react to this Space
+      e.preventDefault(); if (el !== document.body && el.blur) el.blur(); togglePlay();
+    }
   });
 
   // expose a few internals for automated testing only
@@ -1128,21 +1208,136 @@
     if (e.source !== window || !e.data || e.data.source !== 'gaze-pupil-ext') return;
     const m = e.data;
     if (m.type === 'hello') {
-      pupilExt = true; $('syncWrap').classList.remove('hidden');
+      pupilExt = true; $('syncWrap').classList.remove('hidden'); renderPlay();
       if (S.syncPupil) { setSyncState('linking…'); pupilSend('status'); pupilSync(true); }
       return;
     }
     if (m.type !== 'result') return;
-    if (!m.ok) { lastSent = null; setSyncState('⚠ Pupil: ' + (m.error || 'not synced'), 'bad'); return; }
+    if (!m.ok) { lastSent = null; stopPlay(); setSyncState('⚠ Pupil: ' + (m.error || 'not synced'), 'bad'); return; }
     if (m.req === 'status') { if (!$('syncState').textContent.startsWith('✓')) setSyncState('Pupil linked', 'good'); }
     else setSyncState('✓ Pupil on ' + m.fixation, 'good');
   });
   $('syncPupil').addEventListener('change', (e) => {
     S.syncPupil = e.target.checked; save();
+    if (!S.syncPupil) stopPlay();
+    renderPlay();
     if (S.syncPupil) { setSyncState('linking…'); pupilSend('status'); pupilSync(true); } else setSyncState('');
   });
 
-  window.__gaze = { get state() { return S; }, exportAoa, toCsv, parseCsv, statusOf, saveSession, suggestedName };
+  // ---------- play a selected range in Pupil, one gaze after another ----------
+  // Select several gazes (drag or Shift-click in the list), press Play or Space: Pupil shows each one
+  // for a few seconds. The selection stays, so you can code the whole range right after watching it.
+  let play = null;   // { k: row now shown in Pupil, timer, paused }
+  const canPlay = () => pupilExt && !!S.syncPupil && !!sel;
+  const playSecs = () => Math.min(10, Math.max(0.3, Number(S.playSecs) || 1));
+  function renderPlay() {
+    $('playWrap').classList.toggle('hidden', !canPlay());
+    if (!sel) return;
+    const on = !!play && !play.paused;
+    $('btnPlay').classList.toggle('on', on);
+    $('btnPlay').textContent = on ? '❚❚ Pause' : play ? '▶ Resume'
+      : '▶ Play ' + S.rows[sel.a].g + '–' + S.rows[sel.b].g;
+  }
+  function markPlaying(k) {
+    for (const li of $('list').querySelectorAll('li.play')) li.classList.remove('play');
+    const li = listItems[k]; if (!li) return;
+    li.classList.add('play'); li.scrollIntoView({ block: 'nearest' });
+  }
+  function playStep() {
+    if (!play || !sel) return;
+    const k = play.k, g = S.rows[k].g;
+    markPlaying(k);
+    $('curPos').textContent = '▶ gaze ' + g;
+    clearTimeout(syncTimer); lastSent = g;
+    setSyncState('▶ Pupil → ' + g + '…'); pupilSend('goto', g);
+    play.timer = setTimeout(() => {
+      if (!play) return;
+      if (k >= sel.b) { stopPlay(); toast('Played ' + S.rows[sel.a].g + '–' + S.rows[sel.b].g + ' - pick tags to code them all, or press Space to watch again.'); }
+      else { play.k = k + 1; playStep(); }
+    }, playSecs() * 1000);
+  }
+  function togglePlay() {
+    if (!canPlay()) return;
+    if (!play) { play = { k: sel.a, timer: null, paused: false }; playStep(); }
+    else if (!play.paused) { clearTimeout(play.timer); play.paused = true; }
+    else if (play.k >= sel.b) { stopPlay(); return; }
+    else { play.paused = false; play.k++; playStep(); }
+    renderPlay();
+  }
+  function stopPlay() {
+    if (!play) return;
+    clearTimeout(play.timer); play = null;
+    markPlaying(-1); renderPlay();
+    if (sel) $('curPos').textContent = '';
+  }
+  $('btnPlay').addEventListener('click', (e) => { togglePlay(); e.currentTarget.blur(); });
+  $('playSecs').addEventListener('change', (e) => { S.playSecs = e.target.value; S.playSecs = playSecs(); e.target.value = S.playSecs; save(); });
+
+  // ---------- little messages and celebrations (just for fun) ----------
+  let toastTimer = null;
+  function toast(text, ms) {
+    const t = $('toast'); t.textContent = text; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms || 3200);
+  }
+  // confetti from an element (a small burst) or from the top of the page (a big one); skipped for
+  // people who asked their computer for reduced motion
+  function confetti(n, fromEl) {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cv = document.createElement('canvas'); cv.className = 'confetti';
+    const W = innerWidth, H = innerHeight, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr; document.body.appendChild(cv);
+    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    const css = getComputedStyle(document.documentElement);
+    const colors = ['--accent', '--done', '--unsure', '--partial', '--l2'].map((v) => css.getPropertyValue(v).trim());
+    const box = fromEl && fromEl.getBoundingClientRect();
+    const ox = box ? box.left + box.width / 2 : W / 2, oy = box ? box.top + box.height / 2 : H * 0.3;
+    const parts = Array.from({ length: n }, () => {
+      const a = Math.random() * Math.PI * 2, s = 2 + Math.random() * (box ? 6 : 11);
+      return { x: ox, y: oy, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (box ? 2 : 5), r: Math.random() * 6.3, vr: (Math.random() - 0.5) * 0.35,
+               w: 5 + Math.random() * 6, h: 3 + Math.random() * 4, c: colors[(Math.random() * colors.length) | 0] };
+    });
+    const t0 = performance.now(), life = box ? 1300 : 2600;
+    (function frame(now) {
+      const t = now - t0; ctx.clearRect(0, 0, W, H); ctx.globalAlpha = Math.max(0, 1 - Math.pow(t / life, 3));
+      for (const p of parts) {
+        p.vy += 0.22; p.vx *= 0.985; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+      }
+      if (t < life) requestAnimationFrame(frame); else cv.remove();
+    })(t0);
+  }
+  const CHEERS = ['Nice work!', 'Keep it up!', 'Great progress!', 'Looking good!', "You're on a roll!", 'Steady and strong!'];
+  function cheerSave() {
+    const n = S.rows.length, done = S.rows.filter(isDone).length;
+    if (!done) return;   // nothing coded yet (e.g. the first save when a session starts)
+    if (done === n) { confetti(170); toast('Saved - session complete! \u{1F389} Thank you!', 4500); return; }
+    confetti(45, $('btnSave'));
+    toast('Saved · ' + done + ' of ' + n + ' done (' + Math.round((done / n) * 100) + '%) - ' + CHEERS[(Math.random() * CHEERS.length) | 0]);
+  }
+
+  // ---------- tip: Chrome + split view for Pupil sync ----------
+  // shown when the Annotate view first opens in a page visit, until the rater ticks "Don't show this again"
+  const TIP_KEY = 'gazeAnnotator.hideSyncTip';
+  let tipShown = false;
+  const isChrome = () => !!(navigator.userAgentData && navigator.userAgentData.brands.some((b) => b.brand === 'Google Chrome'));
+  function openTip() {
+    $('tipBrowser').classList.toggle('hidden', isChrome());
+    let hidden = false; try { hidden = localStorage.getItem(TIP_KEY) === '1'; } catch (e) { /* no storage */ }
+    $('tipHide').checked = hidden;
+    if (!$('tipDlg').open) $('tipDlg').showModal();
+  }
+  function maybeTip() {
+    if (tipShown) return; tipShown = true;
+    let hidden = false; try { hidden = localStorage.getItem(TIP_KEY) === '1'; } catch (e) { /* no storage */ }
+    if (!hidden) openTip();
+  }
+  $('tipOk').addEventListener('click', () => $('tipDlg').close());
+  $('tipDlg').addEventListener('close', () => { try { localStorage.setItem(TIP_KEY, $('tipHide').checked ? '1' : '0'); } catch (e) { /* no storage */ } });
+  $('btnTip').addEventListener('click', openTip);
+
+  window.__gaze = { get state() { return S; }, exportAoa, toCsv, parseCsv, statusOf, saveSession, suggestedName,
+    setSel, togglePlay, stopPlay, backToUnmarked, get playing() { return play; },
+    pupilHello() { window.postMessage({ source: 'gaze-pupil-ext', type: 'hello' }, '*'); } };
 
   renderAll();
   show(S.rows.length && dict() ? 'annotate' : 'setup');

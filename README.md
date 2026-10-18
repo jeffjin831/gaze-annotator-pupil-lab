@@ -42,12 +42,15 @@ When a run of gazes all get the same codes:
 3. **Undo** (or Ctrl/Cmd+Z) reverts the last change to the selection.
 4. **Done** (or **Esc**) ends the selection and moves to the gaze after it. Clicking any single gaze in the list also ends it.
 
+**Watch the selection in Pupil first** (needs Sync Pupil, see below): with gazes selected, press **▶ Play** or **Space**. Pupil shows each selected gaze in turn, every 1 second by default; change the seconds in the box next to Play (0.3 to 10). The gaze on screen gets a blue bar in the list. **Space** pauses and resumes. Playback stops at the end of the range, on **Esc**, when you pick a tag, or if Pupil can't find a fixation. The selection stays, so you can code the whole range straight after watching it.
+
 A gaze counts as **complete** (green dot) when it has L1, plus L2 if L1 is a device. A gaze flagged **Unsure** also counts as complete, so it's included in the progress bar and skipped by Next incomplete, but it's shown in **blue** (blue dot and *unsure* label) so unsure items stand out. A yellow dot means started but incomplete. A grey dot means not started. A `?` in the list marks gazes flagged Unsure.
 
 ### Moving around
 The whole screen fits in one browser window with no scrolling, except the gaze list on the left. The navigation buttons are at the top right of the coding card.
 - **Next →** / **← Prev**, the **→ / ←** arrow keys, or **D / A**. Keyboard shortcuts (including **U**) are switched off while you type in Notes or the Gaze # box, so you can type freely.
 - **Next incomplete** jumps to the next gaze that still needs work.
+- **B** jumps **back** to the first gaze of the uncoded stretch behind you. Example: gazes up to 99 are coded and you watched 100–105 without coding them; on 105, **B** takes you to 100. Pressing B again goes to the start of the uncoded stretch before that.
 - **Gaze # → Go** jumps to a specific gaze number (hidden in very narrow windows; use the list instead).
 - Click any gaze in the left-hand list.
 - *Auto-advance when a gaze is complete* (optional checkbox) moves to the next gaze as soon as the current one is complete. A non-device gaze then takes a single click.
@@ -59,6 +62,7 @@ The bar at the top shows how many gazes are complete.
 - **Save** (top right, or **Ctrl+S** / **Cmd+S** on Mac) writes your work into your session file. After the first time there's no dialog; it just saves.
 - The top right shows **Saved 2:14 PM** in green, or **Unsaved changes** in amber. If you try to close the tab with unsaved changes, the browser asks you to confirm.
 - **Need to stop?** Press Save, then close the page.
+- Each Save shows a little burst of confetti and how far along you are, and there's a bigger one when the last gaze is coded. It's just for fun, and it's skipped if your computer is set to reduce motion.
 - **Coming back** (same or another computer): open the page, go to *Setup → Resume previous work → Open saved session…*, and pick your session file. Your codes, participant ID, session date and prompts come back, and Save keeps writing into that same file.
 - **Save as…** saves to a different file name, folder or format.
 - The page also keeps a backup copy in the browser, so reopening it on the same computer usually brings you straight back. Treat the session file as the real copy.
@@ -84,8 +88,9 @@ If you code in the app while Pupil Cloud's **Manual Mapper** is open in Chrome, 
 
 **Using it:**
 1. Open the recording in Pupil Cloud with the **Manual Mapper** showing, in Chrome.
-2. Open `gaze_annotator.html` in the same Chrome, ideally in a separate window side by side. A **Sync Pupil** switch appears at the bottom of the coding card (only when the extension is installed). Tick it.
-3. Code as usual. The footer shows **✓ Pupil on 1013** when Pupil is on the same fixation, or a short amber warning if not, e.g. when the Manual Mapper isn't open or Pupil doesn't have that fixation. Pupil doesn't move while you drag-select several gazes; it jumps when you press Done.
+2. Open `gaze_annotator.html` in the same Chrome and put the two side by side: right-click the Pupil Cloud tab, choose Chrome's split view option (e.g. *Add tab to new split view*) and pick the app's tab. Without split view, use two windows snapped to the halves of the screen. A **Sync Pupil** switch appears at the bottom of the coding card (only when the extension is installed). Tick it. (The app shows this tip once when you start coding; *Sync tips* at the bottom brings it back.)
+3. Code as usual. The footer shows **✓ Pupil on 1013** when Pupil is on the same fixation, or a short amber warning if not, e.g. when the Manual Mapper isn't open or Pupil doesn't have that fixation. Pupil doesn't move while you drag-select several gazes; it jumps when you press Done, or plays them one by one when you press **▶ Play** / **Space**.
+4. Keys go to whichever side you clicked last, so click on the app before using A, D, B, U or Space.
 
 **Good to know:**
 - Keep the app's file name `gaze_annotator.html`; the extension recognises the app by that name.
