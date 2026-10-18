@@ -42,7 +42,7 @@ When a run of gazes all get the same codes:
 3. **Undo** (or Ctrl/Cmd+Z) reverts the last change to the selection.
 4. **Done** (or **Esc**) ends the selection and moves to the gaze after it. Clicking any single gaze in the list also ends it.
 
-**Watch the selection in Pupil first** (needs Sync Pupil, see below): with gazes selected, press **▶ Play** or **Space**. Pupil shows each selected gaze in turn, every 1 second by default; change the seconds in the box next to Play (0.3 to 10). The gaze on screen gets a blue bar in the list. **Space** pauses and resumes. Playback stops at the end of the range, on **Esc**, when you pick a tag, or if Pupil can't find a fixation. The selection stays, so you can code the whole range straight after watching it.
+**The selection plays in Pupil by itself** (needs Sync Pupil, see below): as soon as you finish dragging or Shift+clicking, Pupil shows each selected gaze in turn, every 1 second by default. Change the seconds in the box at the top (0.3 to 10). The gaze on screen gets a blue bar in the list, and the top reads *▶ Playing 102*. **Space** pauses and resumes, or plays the range again once it has finished. Playback stops at the end of the range, on **Esc**, when you pick a tag, or if Pupil can't find a fixation. The selection stays, so you can code the whole range straight after watching it.
 
 A gaze counts as **complete** (green dot) when it has L1, plus L2 if L1 is a device. A gaze flagged **Unsure** also counts as complete, so it's included in the progress bar and skipped by Next incomplete, but it's shown in **blue** (blue dot and *unsure* label) so unsure items stand out. A yellow dot means started but incomplete. A grey dot means not started. A `?` in the list marks gazes flagged Unsure.
 
@@ -88,8 +88,8 @@ If you code in the app while Pupil Cloud's **Manual Mapper** is open in Chrome, 
 
 **Using it:**
 1. Open the recording in Pupil Cloud with the **Manual Mapper** showing, in Chrome.
-2. Open `gaze_annotator.html` in the same Chrome and put the two side by side: right-click the Pupil Cloud tab, choose Chrome's split view option (e.g. *Add tab to new split view*) and pick the app's tab. Without split view, use two windows snapped to the halves of the screen. A **Sync Pupil** switch appears at the bottom of the coding card (only when the extension is installed). Tick it. (The app shows this tip once when you start coding; *Sync tips* at the bottom brings it back.)
-3. Code as usual. The footer shows **✓ Pupil on 1013** when Pupil is on the same fixation, or a short amber warning if not, e.g. when the Manual Mapper isn't open or Pupil doesn't have that fixation. Pupil doesn't move while you drag-select several gazes; it jumps when you press Done, or plays them one by one when you press **▶ Play** / **Space**.
+2. Open `gaze_annotator.html` in the same Chrome and put the two side by side: right-click the Pupil Cloud tab, choose Chrome's split view option (e.g. *Add tab to new split view*) and pick the app's tab. Without split view, use two windows snapped to the halves of the screen. A **Sync Pupil** switch appears at the bottom of the coding card (only when the extension is installed). Tick it. (When you start coding, the app shows a short tip with these install steps and the split view set-up, and says whether it can see the extension. *Sync tips* at the bottom brings it back.)
+3. Code as usual. The footer shows **✓ Pupil on 1013** when Pupil is on the same fixation, or a short amber warning if not, e.g. when the Manual Mapper isn't open or Pupil doesn't have that fixation. Pupil doesn't move while you are still dragging; when you let go, it plays the selected gazes one by one (see *Coding several gazes at once*).
 4. Keys go to whichever side you clicked last, so click on the app before using A, D, B, U or Space.
 
 **Good to know:**
