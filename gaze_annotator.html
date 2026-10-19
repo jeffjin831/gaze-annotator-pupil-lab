@@ -42,6 +42,12 @@
   .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
   .btn.danger { color: var(--danger); }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
+  /* smooth, tactile feedback; a clear ring for keyboard users */
+  .btn, .tag, .seg button { transition: background-color .12s, border-color .12s, color .12s, transform .06s; }
+  .btn:active:not(:disabled), .tag:active { transform: translateY(1px); }
+  .btn:focus-visible, .tag:focus-visible, .seg button:focus-visible, .linkbtn:focus-visible,
+  input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  textarea:focus, input:not([type=checkbox]):focus { border-color: var(--accent); }
 
   /* ---- header: one line ---- */
   header { flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 14px;
@@ -172,7 +178,7 @@
 
   /* ---- playing a selected range in Pupil ---- */
   #playWrap { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); }
-  #playSecs { width: 54px; padding: 2px 6px; }
+  #playSecs { width: 48px; padding: 2px 4px; text-align: center; }
   #list li.scan { background: color-mix(in srgb, var(--unsure) 16%, transparent); }
   .scanstate { font-size: 12.5px; font-weight: 600; color: var(--unsure); white-space: nowrap; }
   #playState { white-space: nowrap; }
@@ -323,7 +329,7 @@
         <div class="navbtns hidden" id="scanBtns">
           <span id="scanState" class="scanstate"></span>
           <button class="btn primary" id="btnScanStop" title="Stop: the gazes before the one on screen become one selection (Space)">Stop <kbd>Space</kbd></button>
-          <button class="btn" id="btnScanCancel" title="Stop without selecting (Esc)">Cancel</button>
+          <button class="btn" id="btnScanCancel" title="Stop without selecting (Esc)">Cancel <kbd>Esc</kbd></button>
         </div>
         <div class="navbtns" id="navMain">
           <button class="btn" id="btnPrev" title="Previous gaze (&larr; or A)">&larr; Prev</button>
@@ -394,6 +400,7 @@
     <li><b>Turn sync on for the Pupil tab:</b> open the Manual Mapper, click the extension's button and switch <b>Sync this tab</b> on. A green <b>ON</b> badge shows it is on. The extension can reach only that tab, and only after you switch it on. Switch it off the same way. Reloading or closing the tab also turns it off.</li>
     <li><b>Put Pupil Cloud and this app side by side:</b> right-click the Pupil Cloud tab, choose the split view option
       (for example <i>Add tab to new split view</i>), then pick this app's tab. You see the video and the tags together, and Pupil follows the gaze you are coding.</li>
+    <li><b>Code with Space:</b> on a gaze, press Space to play the gazes ahead in Pupil. Press Space again when the look changes: the gazes before it are selected as one chunk, ready for one tag.</li>
     <li><b>Click on this app's side before using the keys</b> (A, D, B, U, Space): keys go to whichever side you clicked last.</li>
   </ol>
   <p class="muted small">No split view option in your Chrome? Update Chrome, or drag the Pupil Cloud tab out into its own window and snap the two windows to the left and right halves of the screen.</p>
@@ -948,7 +955,7 @@
     const all = n > 0 && done === n;
     if (all && wasAllDone === false && !cheered.has(S.recording)) {
       cheered.add(S.recording); confetti(170);
-      toast('All ' + n + ' gazes coded - great work! \u{1F389} Press Save to keep it.', 5000);
+      toast('All ' + n + ' gazes coded — great work! \u{1F389} Press Save to keep it.', 5000);
     }
     wasAllDone = all;
   }
@@ -1274,7 +1281,7 @@
     if (k === ' ') {
       // blur first, or the focused button / checkbox would also react to this Space
       e.preventDefault(); if (el !== document.body && el.blur) el.blur();
-      if (scan) endScan(false); else if (sel) togglePlay(); else startScan();
+      if (scan) endScan(false); else if (sel && canPlay()) togglePlay(); else startScan();
       return;
     }
     if (k === 'ArrowRight' || k === 'd') { e.preventDefault(); next(); }
@@ -1343,7 +1350,7 @@
     setSyncState('▶ Pupil → ' + g + '…'); pupilSend('goto', g);
     play.timer = setTimeout(() => {
       if (!play) return;
-      if (k >= sel.b) { stopPlay(); toast('Played ' + S.rows[sel.a].g + '–' + S.rows[sel.b].g + ' - pick tags to code them all, or press Space to watch again.'); }
+      if (k >= sel.b) { stopPlay(); toast('Played ' + S.rows[sel.a].g + '–' + S.rows[sel.b].g + ' · pick tags to code them all, or Space to watch again'); }
       else { play.k = k + 1; playStep(); }
     }, playSecs() * 1000);
   }
@@ -1377,7 +1384,7 @@
   }
   function startScan() {
     if (!pupilExt || !S.syncPupil) {
-      toast(pupilExt ? 'Turn on Sync Pupil to scan ahead in Pupil.' : 'Space scans ahead in Pupil Cloud; it needs the Pupil sync extension.');
+      toast(pupilExt ? 'Turn on Sync Pupil (bottom bar) to watch gazes in Pupil with Space.' : 'Space plays gazes in Pupil Cloud; it needs the Pupil sync extension (see Tips).');
       return;
     }
     clearTimeout(advanceTimer); chunk = null;
@@ -1418,7 +1425,7 @@
     const range = S.rows[a].g + (b > a ? '–' + S.rows[b].g : '');
     const why = !whole ? '' : k + 1 >= S.rows.length ? ' (end of the list)'
       : S.rows[k + 1].p !== S.rows[k].p ? ' (end of ' + promptLabel(S.rows[k].p) + ')' : ' (next gaze is already coded)';
-    toast((b > a ? range + ' selected' : 'Gaze ' + range) + why + ' - pick a tag. Shift+A / Shift+D trims or extends.', 4000);
+    toast((b > a ? range + ' selected' : 'Gaze ' + range) + why + ' · pick a tag (Shift+A / Shift+D trims or extends)', 4000);
   }
   // Shift+A / Shift+D: drop the last gaze of the selection, or add the next one (within the prompt)
   function resizeChunk(d) {
@@ -1482,9 +1489,9 @@
   function cheerSave() {
     const n = S.rows.length, done = S.rows.filter(isDone).length;
     if (!done) return;   // nothing coded yet (e.g. the first save when a session starts)
-    if (done === n) { confetti(170); toast('Saved - session complete! \u{1F389} Thank you!', 4500); return; }
+    if (done === n) { confetti(170); toast('Saved · session complete! \u{1F389} Thank you!', 4500); return; }
     confetti(45, $('btnSave'));
-    toast('Saved · ' + done + ' of ' + n + ' done (' + Math.round((done / n) * 100) + '%) - ' + CHEERS[(Math.random() * CHEERS.length) | 0]);
+    toast('Saved · ' + done + ' of ' + n + ' done (' + Math.round((done / n) * 100) + '%) · ' + CHEERS[(Math.random() * CHEERS.length) | 0]);
   }
 
   // ---------- tip: Chrome + split view for Pupil sync ----------
