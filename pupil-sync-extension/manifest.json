@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Gaze Annotator - Pupil Cloud Sync",
-  "version": "2.0",
-  "description": "Moves Pupil Cloud's Manual Mapper to the fixation you are coding in the Gaze Annotator. Connects only to the tab you click it on.",
+  "version": "2.1",
+  "description": "Moves Pupil Cloud's Manual Mapper to the fixation you are coding in the Gaze Annotator. Works only in the tab where you switch it on.",
   "permissions": ["activeTab", "scripting", "storage"],
-  "action": { "default_title": "Gaze Annotator sync: open the Manual Mapper in Pupil Cloud, then click here to connect" },
+  "action": { "default_title": "Gaze Annotator - Pupil sync", "default_popup": "popup.html" },
   "background": { "service_worker": "background.js" },
   "content_scripts": [
     {

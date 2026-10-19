@@ -91,26 +91,26 @@ If you code in the app while Pupil Cloud's **Manual Mapper** is open in Chrome, 
 4. On the extension's card click **Details**, and switch on **Allow access to file URLs**. This lets it talk to the app, which is a local file.
 5. Click the puzzle-piece icon next to Chrome's address bar and **pin** *Gaze Annotator - Pupil Cloud Sync*, so its button stays on the toolbar.
 
-Updating from an older version (1.x)? Copy the new `pupil-sync-extension` folder over the old one, then press the reload arrow on the extension's card in `chrome://extensions`. Version 2.0 no longer has any standing access to Pupil Cloud. It connects only when you click its button (see below).
+Updating from an older version (1.x)? Copy the new `pupil-sync-extension` folder over the old one, then press the reload arrow on the extension's card in `chrome://extensions`. Since version 2.0 it has no standing access to Pupil Cloud: it works only in a tab where you switch it on (see below).
 
 **Using it:**
-1. Open the recording in Pupil Cloud with the **Manual Mapper** showing, in Chrome. Then **click the extension's button** on that tab. A green **ON** badge means it's connected. Click it again to disconnect. Reloading or closing the tab also disconnects; just click again. If you see a red **!**, that tab isn't showing a Pupil Cloud enrichment page such as the Manual Mapper.
+1. Open the recording in Pupil Cloud with the **Manual Mapper** showing, in Chrome. Then **click the extension's button** on that tab and switch **Sync this tab** on. A green **ON** badge on the button shows it's on. Switch it off the same way. Reloading or closing the tab also turns it off; just switch it on again. On a page that isn't a Pupil Cloud enrichment page (where the Manual Mapper lives), the switch is greyed out.
 2. Open `gaze_annotator.html` in the same Chrome and put the two side by side: right-click the Pupil Cloud tab, choose Chrome's split view option (e.g. *Add tab to new split view*) and pick the app's tab. Without split view, use two windows snapped to the halves of the screen. A **Sync Pupil** switch appears at the bottom of the coding card (only when the extension is installed). Tick it. (When you start coding, the app shows a short tip with these install steps and the split view set-up, and says whether it can see the extension. *Tips* at the bottom brings it back.)
 3. Code as usual. The footer shows **✓ Pupil on 1013** when Pupil is on the same fixation, or a short amber warning if not, e.g. when the Manual Mapper isn't open or Pupil doesn't have that fixation. Pupil doesn't move while you are still dragging; when you let go, it plays the selected gazes one by one (see *Coding several gazes at once*).
 4. Keys go to whichever side you clicked last, so click on the app before using A, D, B, U or Space.
 
 **Good to know:**
 - Keep the app's file name `gaze_annotator.html`; the extension recognises the app by that name.
-- The extension has no permission for any website until you click its button on a tab. It then works only in that one tab, and only while the tab shows a Pupil Cloud enrichment page (where the Manual Mapper lives). It makes no network requests and doesn't poll anything.
+- The extension has no permission for any website until you switch sync on in a tab. It then works only in that one tab, and only while the tab shows a Pupil Cloud enrichment page (where the Manual Mapper lives). It makes no network requests and doesn't poll anything.
 - The extension only types the fixation number into Pupil's Fixation box and presses Enter, as you would by hand. It never clicks Pupil's buttons or presses its shortcuts. (Pupil's own shortcuts in the Manual Mapper are **S** = next and **A** = previous; you don't need them while syncing.) It doesn't read, copy or send any recording data, and nothing leaves your computer.
 - If Pupil Labs redesigns the Manual Mapper, syncing may stop, and the footer will show a warning. The app itself keeps working normally; switch Sync Pupil off and tell your coordinator.
 
 **First-time live check** (do once, with a real recording):
-1. Before connecting, tick Sync Pupil in the app: the footer should say *not connected - click the extension button on the Pupil Cloud tab*.
-2. Click the extension's button on the Manual Mapper tab (green **ON**). Note the fixation shown in Pupil, e.g. 1013. In the app, open the same gaze number: Pupil should stay on (or jump to) that fixation.
+1. Before connecting, tick Sync Pupil in the app: the footer should say *not connected - switch sync on in the extension on the Pupil Cloud tab*.
+2. On the Manual Mapper tab, click the extension's button and switch **Sync this tab** on (green **ON**). Note the fixation shown in Pupil, e.g. 1013. In the app, open the same gaze number: Pupil should stay on (or jump to) that fixation.
 3. Press **D** three times: Pupil should show 1016, and the footer **✓ Pupil on 1016**.
 4. Type another gaze in *Go to gaze #* (e.g. 1100) and press Go: Pupil should jump to 1100.
-5. Click the extension's button again (the badge disappears) and press D: Pupil should stay put and the footer should say *not connected*.
+5. Switch **Sync this tab** off (the badge disappears) and press D: Pupil should stay put and the footer should say *not connected*.
 6. Untick Sync Pupil, press D: Pupil should stay put.
 
 ## Combining participants into one file
@@ -148,7 +148,7 @@ Save first. Then go to *Setup → Resume previous work → Start a new session*,
 - `combine_sessions.html`: the separate combine tool (source; loads SheetJS from the CDN like the app, and the shipped build inlines it).
 - `gaze_annotator.html`: the app (source). It loads SheetJS from `cdn.sheetjs.com` (pinned, integrity-checked); the shipped build inlines it.
 - `tools/build.py`: builds the package for raters. Run `python tools/build.py` (public, example tags) or `python tools/build.py --lab` (your private dictionary built in) to get `dist/GazeAnnotator_v<version>[_lab].zip` (the app and the combine tool with SheetJS inlined, plus `Rater Guide.html` made from this README, without this Files section).
-- `pupil-sync-extension/`: the optional Chrome extension for syncing with Pupil Cloud (`manifest.json`, with no site permissions, only `activeTab`, `scripting` and `storage`; `app.js` runs in the app page; `background.js` connects to the one Pupil Cloud tab where you click the extension's button and passes requests to it; `pupil.js` is added to that tab on the click, types the fixation number into the Fixation box and presses Enter, which is how Pupil's Manual Mapper applies a number). It recognises Pupil's Fixation box by the "Skip to next/previous" buttons right next to it, because Pupil's generated class names change between releases.
+- `pupil-sync-extension/`: the optional Chrome extension for syncing with Pupil Cloud (`manifest.json`, with no site permissions, only `activeTab`, `scripting` and `storage`; `app.js` runs in the app page; `popup.html` + `popup.js` are the toolbar pop-up with the *Sync this tab* switch; `background.js` connects to the one Pupil Cloud tab where you switch it on and passes requests to it; `pupil.js` is added to that tab when you switch it on, types the fixation number into the Fixation box and presses Enter, which is how Pupil's Manual Mapper applies a number). It recognises Pupil's Fixation box by the "Skip to next/previous" buttons right next to it, because Pupil's generated class names change between releases.
 - `video/make_video.html` + `tools/devserver.py`: make the 2½-minute guide video (`dist/GazeAnnotator_Guide.mp4`). Start the server with `python tools/devserver.py`, open `http://127.0.0.1:8766/video/make_video.html` in Chrome, and it drives the real app, captures each step, encodes an MP4 in the browser and saves it to `video/out/`. Re-run it after UI changes so the video stays accurate.
 - `test/mock_pupil.html`: a stand-in for Pupil's Manual Mapper panel, used to test the extension (not shipped).
 - `LICENSE` (MIT) and `THIRD_PARTY_NOTICES.md` (SheetJS, Apache-2.0; development-only libraries; trademarks).
