@@ -79,14 +79,19 @@
   table.prompts { border-collapse: collapse; }
   table.prompts th, table.prompts td { padding: 2px 6px 2px 0; text-align: left; }
   table.prompts th { color: var(--muted); font-weight: 500; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
-  table.prompts input { width: 104px; }
-  table.prompts input.pname { width: 64px; }
+  table.prompts input { width: 92px; }
+  table.prompts input.pname { width: 56px; }
+  table.prompts .rm { padding: 3px 9px; color: var(--muted); }
+  table.prompts .rm:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
   table.prompts td.n { min-width: 48px; }
   .setup-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
   #dictInfo div { margin-top: 2px; }
   .last { border: 1px solid var(--accent); border-radius: 8px; padding: 9px 11px; margin-bottom: 10px;
           background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .last #lastSaved { margin-top: 2px; }
   .last #lastSaved.unsaved { color: var(--partial); font-weight: 600; }
+  .last .filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; font-size: 11.5px; }
+  .last .filename:empty { display: none; }
   .card.dict-card { padding: 8px 14px; font-size: 12.5px; }
   .dict-card summary { cursor: pointer; list-style: none; }
   .dict-card summary::-webkit-details-marker { display: none; }
@@ -117,13 +122,13 @@
   .dot.done { background: var(--done); } .dot.partial { background: var(--partial); } .dot.unsure { background: var(--unsure); }
 
   .ann { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding-top: 10px; padding-bottom: 8px; }
-  .topbar { display: flex; align-items: center; gap: 12px; padding-bottom: 8px; }
-  .where { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
+  .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding-bottom: 8px; }
+  .where { flex: 1 0 auto; max-width: 100%; min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
   .where .prompt { font-size: 13px; font-weight: 600; color: var(--muted); }
   .where .gaze { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .where .muted { font-size: 12px; }
-  .status-pill { font-size: 11px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap;
-                 overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .status-pill { font-size: 11px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap; flex: none; }
+  .where .gaze, .where .prompt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .status-pill.done { color: var(--done); border-color: var(--done); }
   .status-pill.partial { color: var(--partial); border-color: var(--partial); }
   .status-pill.unsure { color: var(--unsure); border-color: var(--unsure); }
@@ -147,6 +152,7 @@
   .def { margin-top: 4px; font-size: 12px; color: var(--muted); height: 2.8em; line-height: 1.4em; overflow: hidden;
          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   #defL3:empty { display: none; }
+  #defL1:empty::before { content: "Pick a tag: its definition shows here (hover a tag to preview it)."; font-style: italic; opacity: .7; }
   .flagrow { display: flex; gap: 8px; align-items: stretch; }
   .flagrow .tag { flex: none; }
   .clearbtn { flex: none; font-size: 12.5px; padding: 4px 10px; }
@@ -154,7 +160,13 @@
   .syncstate.good { color: var(--done); } .syncstate.bad { color: var(--partial); }
   .clearbtn:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
   textarea#notes { flex: 1; min-width: 0; height: 52px; resize: none; }
-  .foot { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding-top: 8px; border-top: 1px solid var(--line); margin-top: auto; }
+  .foot { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between;
+          padding-top: 8px; border-top: 1px solid var(--line); margin-top: auto; }
+  .foot .opts { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; min-width: 0; }
+  .foot label { white-space: nowrap; }
+  .foot .keys { display: flex; gap: 12px; white-space: nowrap; margin-left: auto; }
+  .foot .keys kbd + kbd { margin-left: 2px; }
+  .foot .keys span { cursor: help; }
   .linkbtn { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; }
   .linkbtn:hover { text-decoration: underline; }
 
@@ -195,6 +207,7 @@
     .tags { min-height: 27px; gap: 4px; }
     .where .gaze { font-size: 15px; }
     .where { gap: 6px; }
+    #curPos { display: none; }   /* "13/51": the list and the progress bar already show where you are */
     .navbtns .btn { padding: 4px 9px; font-size: 13px; }
     .topbar { padding-bottom: 6px; gap: 8px; }
     #jump, #btnJump { display: none; }
@@ -204,12 +217,14 @@
   @media (max-width: 700px) {
     #viewSetup { grid-template-columns: 1fr; grid-auto-rows: max-content; }
     #viewSetup .col.fill { height: auto; }
+    #viewSetup .col:not(.fill) { order: -1; }   /* one column: "Resume previous work" first */
     .card.prompts-card, .ptable { flex: none; }
   }
   @media (max-width: 600px) {
     #viewAnnotate { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 110px; }
     #listWrap { order: 2; }
     #saved { display: none; }
+    .foot .keys { display: none; }
   }
 </style>
 </head>
@@ -260,12 +275,13 @@
         <div id="lastSession" class="last hidden">
           <div class="small"><b>Last session on this computer:</b> <span id="lastWhat"></span></div>
           <div class="small" id="lastSaved"></div>
+          <div class="small muted filename" id="lastFile"></div>
           <div class="row" style="margin-top:8px; align-items:center">
             <button class="btn primary" id="btnContinue">Continue &rarr;</button>
             <button class="btn danger" id="btnClear" title="Clear this session from the page and set up a new one. Your saved session file is not touched.">Start a new session</button>
           </div>
         </div>
-        <div class="muted small">Or open a session file you saved. Your next saves go back into the same file.</div>
+        <div class="muted small" id="openHint">Open a session file you saved. Your next saves go back into the same file.</div>
         <div style="margin-top:8px"><button class="btn" id="btnOpen">Open saved session&hellip;</button>
           <input type="file" id="fileImport" accept=".csv,.xlsx,.xls" class="hidden"></div>
         <div id="importMsg" class="small" style="margin-top:6px"></div>
@@ -334,13 +350,20 @@
       </div>
 
       <div class="foot small muted">
-        <label><input type="checkbox" id="autoAdvance"> Auto-advance when a gaze is complete</label>
-        <label title="Turn on when coding L3 (e.g. in a second round): progress and Next incomplete then also count gazes missing L3"><input type="checkbox" id="requireL3"> Require L3</label>
-        <label id="syncWrap" class="hidden" title="Moves Pupil Cloud's Manual Mapper to the same fixation as the gaze you are coding (needs the Pupil sync extension, connected by clicking its button on the Manual Mapper tab)"><input type="checkbox" id="syncPupil"> Sync Pupil</label>
-        <span id="syncState" class="syncstate"></span>
-        <button type="button" class="linkbtn" id="btnTip">Sync tips</button>
-        <span class="spacer"></span>
-        <span title="Shortcuts are off while you type in Notes"><kbd>A</kbd>/<kbd>D</kbd> or <kbd>&larr;</kbd>/<kbd>&rarr;</kbd> move &middot; <kbd>B</kbd> back to first unmarked &middot; <kbd>U</kbd> unsure &middot; <kbd>Ctrl/&#8984;+S</kbd> save &middot; drag in list = several gazes (they play in Pupil; <kbd>Space</kbd> pauses / resumes)</span>
+        <div class="opts">
+          <label title="Move to the next gaze as soon as the current one is complete"><input type="checkbox" id="autoAdvance"> Auto-advance</label>
+          <label title="Turn on when coding L3 (e.g. in a second round): progress and Next incomplete then also count gazes missing L3"><input type="checkbox" id="requireL3"> Require L3</label>
+          <label id="syncWrap" class="hidden" title="Moves Pupil Cloud's Manual Mapper to the same fixation as the gaze you are coding (needs the Pupil sync extension, connected by clicking its button on the Manual Mapper tab)"><input type="checkbox" id="syncPupil"> Sync Pupil</label>
+          <span id="syncState" class="syncstate"></span>
+          <button type="button" class="linkbtn" id="btnTip" title="How to set up Chrome, the extension and split view">Tips</button>
+        </div>
+        <div class="keys" title="Keyboard shortcuts (off while you type in Notes or the Gaze # box). Drag or Shift+click in the gaze list to select several gazes.">
+          <span title="Previous / next gaze (the arrow keys work too)"><kbd>A</kbd><kbd>D</kbd> move</span>
+          <span title="Back to the first uncoded gaze behind you"><kbd>B</kbd> back</span>
+          <span title="Flag the gaze as Unsure"><kbd>U</kbd> unsure</span>
+          <span title="Pause, resume or replay the selected gazes in Pupil"><kbd>Space</kbd> play</span>
+          <span title="Save to your session file"><kbd id="keySave">Ctrl S</kbd> save</span>
+        </div>
       </div>
     </div>
   </div>
@@ -567,7 +590,8 @@
       mk('name', 'pname', 'number'); mk('from', '', 'number'); mk('to', '', 'number');
       const tdN = document.createElement('td'); tdN.className = 'muted small'; tr.appendChild(tdN);
       const tdX = document.createElement('td'); const x = document.createElement('button');
-      x.className = 'btn small'; x.textContent = 'Remove'; x.disabled = S.prompts.length < 2;
+      x.className = 'btn small rm'; x.textContent = '✕'; x.disabled = S.prompts.length < 2;
+      x.title = 'Remove this prompt'; x.setAttribute('aria-label', 'Remove prompt ' + (p.name || i + 1));
       x.addEventListener('click', () => { S.prompts.splice(i, 1); renderPrompts(); saveSoon(); });
       tdX.appendChild(x); tr.appendChild(tdX);
       const updateCount = () => {
@@ -1092,6 +1116,7 @@
   function renderLastSession() {
     const has = S.rows.length > 0;
     $('lastSession').classList.toggle('hidden', !has);
+    $('openHint').textContent = (has ? 'Or open' : 'Open') + ' a session file you saved. Your next saves go back into the same file.';
     if (!has) return;
     const done = S.rows.filter(isDone).length;
     $('lastWhat').textContent = [fileId(S.recording) || '(no participant ID)', S.sessionDate ? 'session ' + S.sessionDate.slice(5) : '',
@@ -1099,9 +1124,10 @@
     const name = (fileHandle && fileHandle.name) || S.lastFile || '';
     const el = $('lastSaved');
     el.className = 'small' + (S.dirty || !name ? ' unsaved' : '');
-    el.textContent = !name ? 'Not saved to a file yet - continue and press Save.'
-      : S.dirty ? 'Unsaved changes since the last save to ' + name + ' - continue and press Save.'
-      : 'Saved to ' + name + (S.savedAt ? ' at ' + new Date(S.savedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '') + '.';
+    el.textContent = !name ? 'Not saved to a file yet: continue and press Save.'
+      : S.dirty ? 'Unsaved changes: continue and press Save.'
+      : 'Saved' + (S.savedAt ? ' ' + new Date(S.savedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+    $('lastFile').textContent = name; $('lastFile').title = name ? 'Session file: ' + name : '';
   }
   function show(view) {
     const ann = view === 'annotate' && S.rows.length > 0;
@@ -1386,6 +1412,7 @@
     setSel, togglePlay, stopPlay, autoPlay, backToUnmarked, get playing() { return play; },
     pupilHello() { window.postMessage({ source: 'gaze-pupil-ext', type: 'hello' }, '*'); } };
 
+  if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) $('keySave').textContent = '⌘ S';
   renderAll();
   // A fresh opening of the app starts on Setup, where the rater continues the last session or starts a
   // new one. Only a reload of the same tab (e.g. F5 by accident) goes straight back to coding.

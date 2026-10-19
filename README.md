@@ -47,13 +47,13 @@ When a run of gazes all get the same codes:
 A gaze counts as **complete** (green dot) when it has L1, plus L2 if L1 is a device. A gaze flagged **Unsure** also counts as complete, so it's included in the progress bar and skipped by Next incomplete, but it's shown in **blue** (blue dot and *unsure* label) so unsure items stand out. A yellow dot means started but incomplete. A grey dot means not started. A `?` in the list marks gazes flagged Unsure.
 
 ### Moving around
-The whole screen fits in one browser window with no scrolling, except the gaze list on the left. The navigation buttons are at the top right of the coding card.
+The whole screen fits in one browser window with no scrolling, except the gaze list on the left, and stays usable in half a screen (Chrome split view). The navigation buttons are at the top right of the coding card. The bottom bar lists the keyboard shortcuts in short form; hover over one for what it does.
 - **Next →** / **← Prev**, the **→ / ←** arrow keys, or **D / A**. Keyboard shortcuts (including **U**) are switched off while you type in Notes or the Gaze # box, so you can type freely.
 - **Next incomplete** jumps to the next gaze that still needs work.
 - **B** jumps **back** to the first gaze of the uncoded stretch behind you. Example: gazes up to 99 are coded and you watched 100–105 without coding them; on 105, **B** takes you to 100. Pressing B again goes to the start of the uncoded stretch before that.
 - **Gaze # → Go** jumps to a specific gaze number (hidden in very narrow windows; use the list instead).
 - Click any gaze in the left-hand list.
-- *Auto-advance when a gaze is complete* (optional checkbox) moves to the next gaze as soon as the current one is complete. A non-device gaze then takes a single click.
+- *Auto-advance* (optional checkbox at the bottom) moves to the next gaze as soon as the current one is complete. A non-device gaze then takes a single click.
 - *Require L3* (checkbox at the bottom): turn it on for an L3 round. Gazes without L3 then count as incomplete, so the progress bar and **Next incomplete** take you to the ones still missing L3.
 
 The bar at the top shows how many gazes are complete.
@@ -95,7 +95,7 @@ Updating from an older version (1.x)? Copy the new `pupil-sync-extension` folder
 
 **Using it:**
 1. Open the recording in Pupil Cloud with the **Manual Mapper** showing, in Chrome. Then **click the extension's button** on that tab. A green **ON** badge means it's connected. Click it again to disconnect. Reloading or closing the tab also disconnects; just click again. If you see a red **!**, that tab isn't showing a Pupil Cloud enrichment page such as the Manual Mapper.
-2. Open `gaze_annotator.html` in the same Chrome and put the two side by side: right-click the Pupil Cloud tab, choose Chrome's split view option (e.g. *Add tab to new split view*) and pick the app's tab. Without split view, use two windows snapped to the halves of the screen. A **Sync Pupil** switch appears at the bottom of the coding card (only when the extension is installed). Tick it. (When you start coding, the app shows a short tip with these install steps and the split view set-up, and says whether it can see the extension. *Sync tips* at the bottom brings it back.)
+2. Open `gaze_annotator.html` in the same Chrome and put the two side by side: right-click the Pupil Cloud tab, choose Chrome's split view option (e.g. *Add tab to new split view*) and pick the app's tab. Without split view, use two windows snapped to the halves of the screen. A **Sync Pupil** switch appears at the bottom of the coding card (only when the extension is installed). Tick it. (When you start coding, the app shows a short tip with these install steps and the split view set-up, and says whether it can see the extension. *Tips* at the bottom brings it back.)
 3. Code as usual. The footer shows **✓ Pupil on 1013** when Pupil is on the same fixation, or a short amber warning if not, e.g. when the Manual Mapper isn't open or Pupil doesn't have that fixation. Pupil doesn't move while you are still dragging; when you let go, it plays the selected gazes one by one (see *Coding several gazes at once*).
 4. Keys go to whichever side you clicked last, so click on the app before using A, D, B, U or Space.
 
