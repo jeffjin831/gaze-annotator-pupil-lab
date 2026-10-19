@@ -63,9 +63,13 @@ The bar at the top shows how many gazes are complete.
 - The top right shows **Saved 2:14 PM** in green, or **Unsaved changes** in amber. If you try to close the tab with unsaved changes, the browser asks you to confirm.
 - **Need to stop?** Press Save, then close the page.
 - Each Save shows a little burst of confetti and how far along you are, and there's a bigger one when the last gaze is coded. It's just for fun, and it's skipped if your computer is set to reduce motion.
-- **Coming back** (same or another computer): open the page, go to *Setup → Resume previous work → Open saved session…*, and pick your session file. Your codes, participant ID, session date and prompts come back, and Save keeps writing into that same file.
+- **Coming back:** the app always opens on the **Setup** page. Under *Resume previous work*:
+  - **Continue →** picks up the last session on this computer (the box shows the participant, how many gazes are complete, and when it was last saved).
+  - **Open saved session…** opens your session file instead, on this or another computer. Your codes, participant ID, session date and prompts come back, and Save keeps writing into that same file.
+  - **Start a new session** clears the last one from the page so you can set up a new participant. Your saved file is not touched.
+- Reloading the page (e.g. pressing F5 by accident) takes you straight back to the gaze you were on.
 - **Save as…** saves to a different file name, folder or format.
-- The page also keeps a backup copy in the browser, so reopening it on the same computer usually brings you straight back. Treat the session file as the real copy.
+- The page also keeps a backup copy in the browser; that's what **Continue** opens. Treat the session file as the real copy.
 - When you've finished, the session file *is* the finished annotation file: hand it in or upload it wherever your team collects them.
 - In browsers that can't save into a chosen file (Safari, Firefox), **Save** downloads `<STUDY>_<MM-DD>_P<number>_Gaze_Annotation.csv` to your Downloads folder instead, and *Download .xlsx* replaces Save as…. Chrome or Edge is recommended.
 
@@ -119,7 +123,7 @@ The app keeps one file per participant. To put all participants of a data-collec
 Your participant files are only read, never changed. If you open the combined workbook in the annotation app, it asks which participant to open and saves that participant to their own file, so the combined workbook is never overwritten.
 
 ## Starting a new participant / session
-Save first. Then go to *Setup → Clear session (start over)*, enter the new participant ID, session date and ranges, and click Start annotating. You'll be asked where to save the new session file.
+Save first. Then go to *Setup → Resume previous work → Start a new session*, enter the new participant ID, session date and ranges, and click Start annotating. You'll be asked where to save the new session file.
 
 ## Troubleshooting
 - **"Could not save … If the file is open in Excel…"**: Excel locks files it has open. Close the file in Excel and press Save again.

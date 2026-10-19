@@ -84,6 +84,9 @@
   table.prompts td.n { min-width: 48px; }
   .setup-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
   #dictInfo div { margin-top: 2px; }
+  .last { border: 1px solid var(--accent); border-radius: 8px; padding: 9px 11px; margin-bottom: 10px;
+          background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .last #lastSaved.unsaved { color: var(--partial); font-weight: 600; }
   .card.dict-card { padding: 8px 14px; font-size: 12.5px; }
   .dict-card summary { cursor: pointer; list-style: none; }
   .dict-card summary::-webkit-details-marker { display: none; }
@@ -254,11 +257,18 @@
     <div class="col">
       <div class="card">
         <h2>Resume previous work</h2>
-        <div class="muted small">Open the session file you saved last time. Your next saves go back into the same file.</div>
+        <div id="lastSession" class="last hidden">
+          <div class="small"><b>Last session on this computer:</b> <span id="lastWhat"></span></div>
+          <div class="small" id="lastSaved"></div>
+          <div class="row" style="margin-top:8px; align-items:center">
+            <button class="btn primary" id="btnContinue">Continue &rarr;</button>
+            <button class="btn danger" id="btnClear" title="Clear this session from the page and set up a new one. Your saved session file is not touched.">Start a new session</button>
+          </div>
+        </div>
+        <div class="muted small">Or open a session file you saved. Your next saves go back into the same file.</div>
         <div style="margin-top:8px"><button class="btn" id="btnOpen">Open saved session&hellip;</button>
           <input type="file" id="fileImport" accept=".csv,.xlsx,.xls" class="hidden"></div>
         <div id="importMsg" class="small" style="margin-top:6px"></div>
-        <div style="margin-top:10px"><button class="btn danger" id="btnClear">Clear session (start over)</button></div>
       </div>
       <div class="card dict-card">
         <details id="dictMore">
@@ -1078,8 +1088,24 @@
   }
 
   // ---------- views / wiring ----------
+  // the session kept in this browser, offered on the Setup page: continue it, or start a new one
+  function renderLastSession() {
+    const has = S.rows.length > 0;
+    $('lastSession').classList.toggle('hidden', !has);
+    if (!has) return;
+    const done = S.rows.filter(isDone).length;
+    $('lastWhat').textContent = [fileId(S.recording) || '(no participant ID)', S.sessionDate ? 'session ' + S.sessionDate.slice(5) : '',
+      done + ' of ' + S.rows.length + ' gazes complete'].filter(Boolean).join(' · ');
+    const name = (fileHandle && fileHandle.name) || S.lastFile || '';
+    const el = $('lastSaved');
+    el.className = 'small' + (S.dirty || !name ? ' unsaved' : '');
+    el.textContent = !name ? 'Not saved to a file yet - continue and press Save.'
+      : S.dirty ? 'Unsaved changes since the last save to ' + name + ' - continue and press Save.'
+      : 'Saved to ' + name + (S.savedAt ? ' at ' + new Date(S.savedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '') + '.';
+  }
   function show(view) {
     const ann = view === 'annotate' && S.rows.length > 0;
+    if (!ann) renderLastSession();
     $('viewSetup').classList.toggle('hidden', ann);
     $('viewAnnotate').classList.toggle('hidden', !ann);
     $('btnSetup').classList.toggle('on', !ann);
@@ -1132,12 +1158,15 @@
   $('fileImport').addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) await importFile(f); e.target.value = ''; });
   $('btnOpen').addEventListener('click', openSession);
   $('btnClear').addEventListener('click', () => {
-    if (!confirm('Clear this session from the page? Your saved session file is not touched.' +
-      (S.dirty && S.rows.length ? '\n\nWARNING: there are unsaved changes - press Cancel, then Save first.' : ''))) return;
+    if (!confirm('Start a new session? The current one' + (S.recording ? ' (' + fileId(S.recording) + ')' : '') +
+      ' is cleared from this page. Your saved session file is not touched.' +
+      (S.dirty && S.rows.length ? '\n\nWARNING: there are unsaved changes - press Cancel, then Continue and Save first.' : ''))) return;
     S.rows = []; S.idx = 0; S.recording = ''; S.sessionDate = ''; S.prompts = [{ name: '1', from: '', to: '' }];
     S.dirty = false; S.lastFile = ''; S.savedAt = ''; fileHandle = null; rememberHandle(null);
-    save(); renderAll(); show('setup');
+    $('importMsg').textContent = '';
+    save(); renderAll(); show('setup'); $('recording').focus();
   });
+  $('btnContinue').addEventListener('click', () => show('annotate'));
   $('btnSetup').addEventListener('click', () => show('setup'));
   $('btnAnnotate').addEventListener('click', () => show('annotate'));
   $('btnSave').addEventListener('click', () => saveSession(false));
@@ -1358,8 +1387,13 @@
     pupilHello() { window.postMessage({ source: 'gaze-pupil-ext', type: 'hello' }, '*'); } };
 
   renderAll();
-  show(S.rows.length && dict() ? 'annotate' : 'setup');
-  if (canPickFile && S.rows.length) recallHandle().then((h) => { if (h) { fileHandle = h; renderFileStatus(); } });
+  // A fresh opening of the app starts on Setup, where the rater continues the last session or starts a
+  // new one. Only a reload of the same tab (e.g. F5 by accident) goes straight back to coding.
+  // (sessionStorage survives a reload but not closing the tab or the browser.)
+  let reload = false;
+  try { reload = sessionStorage.getItem('gazeAnnotator.open') === '1'; sessionStorage.setItem('gazeAnnotator.open', '1'); } catch (e) { /* no storage */ }
+  show(reload && S.rows.length && dict() ? 'annotate' : 'setup');
+  if (canPickFile && S.rows.length) recallHandle().then((h) => { if (h) { fileHandle = h; renderFileStatus(); renderLastSession(); } });
 })();
 </script>
 </body>
