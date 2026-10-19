@@ -172,7 +172,9 @@
 
   /* ---- playing a selected range in Pupil ---- */
   #playWrap { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--muted); }
-  #playSecs { width: 58px; padding: 4px 6px; }
+  #playSecs { width: 54px; padding: 2px 6px; }
+  #list li.scan { background: color-mix(in srgb, var(--unsure) 16%, transparent); }
+  .scanstate { font-size: 12.5px; font-weight: 600; color: var(--unsure); white-space: nowrap; }
   #playState { white-space: nowrap; }
   #playState.on { color: var(--unsure); font-weight: 600; }
   #list li.play { box-shadow: inset 4px 0 0 var(--unsure); font-weight: 700; }
@@ -312,12 +314,16 @@
           <span class="status-pill" id="curStatus"></span>
         </div>
         <div class="navbtns hidden" id="batchBtns">
-          <span id="playWrap" class="hidden" title="Selected gazes play in Pupil Cloud one after another as soon as you select them (Space pauses / resumes / replays, Esc stops)">
+          <span id="playWrap" class="hidden" title="Selected gazes play in Pupil Cloud one after another (Space pauses / resumes / replays, Esc stops). Shift+A / Shift+D shortens or lengthens the selection.">
             <span id="playState"></span>
-            &middot; every <input type="number" id="playSecs" min="0.3" max="10" step="0.5" aria-label="Seconds per gaze"> s
           </span>
           <button class="btn" id="btnUndo" title="Undo the last change to the selected gazes">Undo</button>
           <button class="btn primary" id="btnDone" title="Finish and go to the gaze after the selection (Esc)">Done <kbd>Esc</kbd></button>
+        </div>
+        <div class="navbtns hidden" id="scanBtns">
+          <span id="scanState" class="scanstate"></span>
+          <button class="btn primary" id="btnScanStop" title="Stop: the gazes before the one on screen become one selection (Space)">Stop <kbd>Space</kbd></button>
+          <button class="btn" id="btnScanCancel" title="Stop without selecting (Esc)">Cancel</button>
         </div>
         <div class="navbtns" id="navMain">
           <button class="btn" id="btnPrev" title="Previous gaze (&larr; or A)">&larr; Prev</button>
@@ -354,6 +360,7 @@
           <label title="Move to the next gaze as soon as the current one is complete"><input type="checkbox" id="autoAdvance"> Auto-advance</label>
           <label title="Turn on when coding L3 (e.g. in a second round): progress and Next incomplete then also count gazes missing L3"><input type="checkbox" id="requireL3"> Require L3</label>
           <label id="syncWrap" class="hidden" title="Moves Pupil Cloud's Manual Mapper to the same fixation as the gaze you are coding (needs the Pupil sync extension, switched on for the Manual Mapper tab)"><input type="checkbox" id="syncPupil"> Sync Pupil</label>
+          <label id="speedWrap" class="hidden" title="How long Pupil shows each gaze when you scan ahead (Space) or play selected gazes"><input type="number" id="playSecs" min="0.3" max="10" step="0.5" aria-label="Seconds per gaze"> s/gaze</label>
           <span id="syncState" class="syncstate"></span>
           <button type="button" class="linkbtn" id="btnTip" title="How to set up Chrome, the extension and split view">Tips</button>
         </div>
@@ -361,7 +368,7 @@
           <span title="Previous / next gaze (the arrow keys work too)"><kbd>A</kbd><kbd>D</kbd> move</span>
           <span title="Back to the first uncoded gaze behind you"><kbd>B</kbd> back</span>
           <span title="Flag the gaze as Unsure"><kbd>U</kbd> unsure</span>
-          <span title="Pause, resume or replay the selected gazes in Pupil"><kbd>Space</kbd> play</span>
+          <span title="Scan ahead: Pupil plays the next gazes; press Space again when the look changes and the gazes before it are selected as one chunk (Shift+A / Shift+D trims or extends it). With gazes selected: replay them."><kbd>Space</kbd> scan</span>
           <span title="Save to your session file"><kbd id="keySave">Ctrl S</kbd> save</span>
         </div>
       </div>
@@ -804,7 +811,7 @@
   function setSel(i, j) {
     const a = Math.min(i, j), b = Math.max(i, j);
     if (a === b) { go(a); return; }
-    stopPlay(); clearTimeout(advanceTimer);
+    stopScan(); chunk = null; stopPlay(); clearTimeout(advanceTimer);
     if (document.activeElement === $('notes')) $('notes').blur();
     const old = sel, wasIdx = S.idx; sel = { a, b }; undo = null; S.idx = b;
     refreshRange(old); updateListItem(wasIdx); renderCurrent();
@@ -813,12 +820,13 @@
     const lo = Math.min(old ? old.a : Infinity, sel ? sel.a : Infinity, S.idx), hi = Math.max(old ? old.b : -1, sel ? sel.b : -1, S.idx);
     for (let k = lo; k <= hi; k++) updateListItem(k);
   }
-  function dropSel() { if (!sel) return; stopPlay(); const old = sel; sel = null; undo = null; refreshRange(old); }
+  function dropSel() { chunk = null; if (!sel) return; stopPlay(); const old = sel; sel = null; undo = null; refreshRange(old); }
   function snapshot() { undo = { a: sel.a, rows: selRows().map((r) => Object.assign({}, r)) }; $('btnUndo').disabled = false; }
   function bulkChanged() {
     S.dirty = true; save();
     for (let k = sel.a; k <= sel.b; k++) updateListItem(k);
     renderCurrent(); renderProgress();
+    checkChunkDone();
   }
   function bulkPick(field, value) {
     snapshot();
@@ -897,7 +905,9 @@
   }
 
   function renderCurrent() {
-    $('navMain').classList.toggle('hidden', !!sel); $('batchBtns').classList.toggle('hidden', !sel);
+    $('navMain').classList.toggle('hidden', !!sel || !!scan); $('batchBtns').classList.toggle('hidden', !sel);
+    $('scanBtns').classList.toggle('hidden', !scan);
+    if (scan) $('scanState').textContent = '▶ Scanning ' + S.rows[scan.a].g + (scan.k > scan.a ? '–' + S.rows[scan.k].g : '');
     renderPlay();
     if (sel) { renderBulk(); return; }
     $('curPrompt').classList.remove('batch-note');
@@ -952,7 +962,7 @@
 
   let advanceTimer = null;
   function pick(field, value) {
-    cleared = null; stopPlay();
+    cleared = null; stopPlay(); stopScan();
     if (sel) { bulkPick(field, value); return; }
     const r = cur();
     const selecting = r[field] !== value;
@@ -960,6 +970,7 @@
     if (field === 'l1' && !needsL2(r.l1)) r.l2 = '';
     touch();
     clearTimeout(advanceTimer);
+    if (chunk) { checkChunkDone(); return; }   // a one-gaze chunk from a scan moves on by itself
     if (S.autoAdvance && selecting && isDone(r) && S.idx < S.rows.length - 1) {
       advanceTimer = setTimeout(next, 250);
     }
@@ -967,6 +978,7 @@
 
   function go(i, carry) {
     if (!S.rows.length) return;
+    stopScan(); chunk = null;
     clearTimeout(advanceTimer);
     dropSel();   // moving to a gaze ends any multi-gaze selection
     if (cleared && cleared.i !== i) cleared = null;
@@ -1207,7 +1219,7 @@
   let cleared = null;   // { i, row }: lets a one-gaze clear be undone until you move on or change it
   function clearGaze() {
     const blank = { l1: '', l2: '', l3: '', u: false, notes: '' };
-    stopPlay();
+    stopPlay(); stopScan();
     if (sel) { snapshot(); const now = new Date().toISOString(); selRows().forEach((r) => Object.assign(r, blank, { t: now })); bulkChanged(); return; }
     const r = cur(); if (!r) return;
     if (cleared && cleared.i === S.idx) { S.rows[S.idx] = cleared.row; cleared = null; S.dirty = true; save(); renderCurrent(); updateListItem(S.idx); renderProgress(); return; }
@@ -1215,7 +1227,7 @@
     Object.assign(r, blank); $('notes').value = ''; touch();
   }
   $('btnClearGaze').addEventListener('click', clearGaze);
-  function toggleUnsure() { cleared = null; stopPlay(); if (sel) { bulkUnsure(); return; } const r = cur(); if (!r) return; r.u = !r.u; touch(); }
+  function toggleUnsure() { cleared = null; stopPlay(); stopScan(); if (sel) { bulkUnsure(); return; } const r = cur(); if (!r) return; r.u = !r.u; touch(); checkChunkDone(); }
   $('btnUndo').addEventListener('click', undoBulk);
   $('btnDone').addEventListener('click', finishSel);
   $('notes').addEventListener('focus', () => { if (sel) snapshot(); });
@@ -1250,19 +1262,25 @@
     const typing = t === 'TEXTAREA' || t === 'SELECT' || el.isContentEditable ||
       (t === 'INPUT' && !['checkbox', 'radio', 'button'].includes(el.type));
     if (typing) { if (e.key === 'Escape') el.blur(); return; }
+    if (e.key === 'Escape' && scan) { e.preventDefault(); cancelScan(); return; }
     if (e.key === 'Escape' && play) { e.preventDefault(); stopPlay(); return; }   // first Esc stops playing, the next one finishes
     if (e.key === 'Escape' && sel) { e.preventDefault(); finishSel(); return; }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'z' && sel && undo) { e.preventDefault(); undoBulk(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat && e.key.length === 1) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (e.shiftKey && (k === 'a' || k === 'd' || k === 'ArrowLeft' || k === 'ArrowRight')) {   // trim / extend a selection
+      e.preventDefault(); resizeChunk(k === 'a' || k === 'ArrowLeft' ? -1 : 1); return;
+    }
+    if (k === ' ') {
+      // blur first, or the focused button / checkbox would also react to this Space
+      e.preventDefault(); if (el !== document.body && el.blur) el.blur();
+      if (scan) endScan(false); else if (sel) togglePlay(); else startScan();
+      return;
+    }
     if (k === 'ArrowRight' || k === 'd') { e.preventDefault(); next(); }
     else if (k === 'ArrowLeft' || k === 'a') { e.preventDefault(); prev(); }
     else if (k === 'u') { e.preventDefault(); toggleUnsure(); }
     else if (k === 'b') { e.preventDefault(); backToUnmarked(); }
-    else if (k === ' ' && canPlay()) {
-      // blur first, or the focused button / checkbox would also react to this Space
-      e.preventDefault(); if (el !== document.body && el.blur) el.blur(); togglePlay();
-    }
   });
 
   // expose a few internals for automated testing only
@@ -1282,18 +1300,18 @@
     if (e.source !== window || !e.data || e.data.source !== 'gaze-pupil-ext') return;
     const m = e.data;
     if (m.type === 'hello') {
-      pupilExt = true; $('syncWrap').classList.remove('hidden'); renderPlay(); renderTipExt();
+      pupilExt = true; $('syncWrap').classList.remove('hidden'); $('speedWrap').classList.remove('hidden'); renderPlay(); renderTipExt();
       if (S.syncPupil) { setSyncState('linking…'); pupilSend('status'); pupilSync(true); }
       return;
     }
     if (m.type !== 'result') return;
-    if (!m.ok) { lastSent = null; stopPlay(); setSyncState('⚠ Pupil: ' + (m.error || 'not synced'), 'bad'); return; }
+    if (!m.ok) { lastSent = null; stopPlay(); if (scan) endScan(false); setSyncState('⚠ Pupil: ' + (m.error || 'not synced'), 'bad'); return; }
     if (m.req === 'status') { if (!$('syncState').textContent.startsWith('✓')) setSyncState('Pupil linked', 'good'); }
     else setSyncState('✓ Pupil on ' + m.fixation, 'good');
   });
   $('syncPupil').addEventListener('change', (e) => {
     S.syncPupil = e.target.checked; save();
-    if (!S.syncPupil) stopPlay();
+    if (!S.syncPupil) { stopPlay(); cancelScan(); }
     renderPlay();
     if (S.syncPupil) { setSyncState('linking…'); pupilSend('status'); pupilSync(true); } else setSyncState('');
   });
@@ -1342,6 +1360,87 @@
     clearTimeout(play.timer); play = null;
     markPlaying(-1); renderPlay();
   }
+  // ---------- scan ahead: Space plays the next gazes in Pupil, Space again cuts them into one chunk ----------
+  // On a gaze, Space starts showing it and the ones after it in Pupil. Space again stops: the gazes
+  // shown before the one on screen become one selection (the one on screen is where the look changed,
+  // so it starts the next chunk). A scan also stops by itself before an already-coded gaze and at the
+  // end of a prompt; then every gaze it showed is selected. Once every gaze in the chunk is coded, the
+  // app moves on to the gaze after it, ready for the next Space.
+  let scan = null;    // { a: first row, k: row on screen, timer }
+  let chunk = null;   // { a, b }: rows selected by the last scan, until they are coded or you move away
+  const scanCanGo = (k) => k + 1 < S.rows.length && S.rows[k + 1].p === S.rows[k].p && statusOf(S.rows[k + 1]) === 'empty';
+  function markScan() {
+    for (const li of $('list').querySelectorAll('li.scan')) li.classList.remove('scan');
+    if (!scan) { markPlaying(-1); return; }
+    for (let i = scan.a; i <= scan.k; i++) if (listItems[i]) listItems[i].classList.add('scan');
+    markPlaying(scan.k);
+  }
+  function startScan() {
+    if (!pupilExt || !S.syncPupil) {
+      toast(pupilExt ? 'Turn on Sync Pupil to scan ahead in Pupil.' : 'Space scans ahead in Pupil Cloud; it needs the Pupil sync extension.');
+      return;
+    }
+    clearTimeout(advanceTimer); chunk = null;
+    if (document.activeElement === $('notes')) $('notes').blur();
+    scan = { a: S.idx, k: S.idx, timer: null };
+    scanStep();
+  }
+  function scanStep() {
+    const k = scan.k, was = S.idx, g = S.rows[k].g;
+    S.idx = k; updateListItem(was); updateListItem(k);   // follow along without go(), which would end the scan
+    markScan(); renderCurrent();
+    clearTimeout(syncTimer); lastSent = g;
+    setSyncState('▶ Pupil → ' + g + '…'); pupilSend('goto', g);
+    scan.timer = setTimeout(() => {
+      if (!scan) return;
+      if (scanCanGo(k)) { scan.k = k + 1; scanStep(); } else endScan(true);
+    }, playSecs() * 1000);
+  }
+  function stopScan() {   // stop and forget the scan, staying on the gaze on screen
+    if (!scan) return;
+    clearTimeout(scan.timer); scan = null; markScan(); renderCurrent();
+  }
+  function cancelScan() { if (scan) { stopScan(); toast('Scan cancelled.'); } }
+  // whole = the scan ran up to a coded gaze or the end of the prompt, so every gaze shown is taken;
+  // otherwise Space was pressed and the gaze on screen is left out
+  function endScan(whole) {
+    if (!scan) return;
+    const a = scan.a, k = scan.k, b = whole ? k : Math.max(a, k - 1);
+    stopScan();
+    // carry the classroom state (L3) into the chunk, as moving gaze by gaze would
+    const before = S.rows[a - 1];
+    if (before && before.p === S.rows[a].p && before.l3) {
+      for (let i = a; i <= b; i++) if (!S.rows[i].l3) { S.rows[i].l3 = before.l3; S.dirty = true; }
+      save();
+    }
+    if (b > a) setSel(a, b); else go(a);
+    chunk = { a, b };
+    const range = S.rows[a].g + (b > a ? '–' + S.rows[b].g : '');
+    const why = !whole ? '' : k + 1 >= S.rows.length ? ' (end of the list)'
+      : S.rows[k + 1].p !== S.rows[k].p ? ' (end of ' + promptLabel(S.rows[k].p) + ')' : ' (next gaze is already coded)';
+    toast((b > a ? range + ' selected' : 'Gaze ' + range) + why + ' - pick a tag. Shift+A / Shift+D trims or extends.', 4000);
+  }
+  // Shift+A / Shift+D: drop the last gaze of the selection, or add the next one (within the prompt)
+  function resizeChunk(d) {
+    const a = sel ? sel.a : S.idx, b = (sel ? sel.b : S.idx) + d;
+    if (b < a || b >= S.rows.length || S.rows[b].p !== S.rows[a].p) return;
+    const fromScan = !!chunk;
+    if (b > a) setSel(a, b); else go(a);
+    if (fromScan) chunk = { a, b };
+    const g = S.rows[b].g;   // show the new last gaze in Pupil, to check it
+    if (pupilExt && S.syncPupil) { clearTimeout(syncTimer); lastSent = g; setSyncState('Pupil → ' + g + '…'); pupilSend('goto', g); }
+  }
+  // a scanned chunk that is now fully coded: move on to the gaze after it
+  function checkChunkDone() {
+    if (!chunk) return;
+    for (let i = chunk.a; i <= chunk.b; i++) if (!isDone(S.rows[i])) return;
+    const after = chunk.b + 1; chunk = null;
+    clearTimeout(advanceTimer);
+    advanceTimer = setTimeout(() => { if (after < S.rows.length) go(after, true); else if (sel) finishSel(); }, 350);
+  }
+  $('btnScanStop').addEventListener('click', () => endScan(false));
+  $('btnScanCancel').addEventListener('click', cancelScan);
+
   $('playSecs').addEventListener('change', (e) => { S.playSecs = e.target.value; S.playSecs = playSecs(); e.target.value = S.playSecs; save(); });
 
   // ---------- little messages and celebrations (just for fun) ----------

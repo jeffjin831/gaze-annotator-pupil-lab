@@ -32,8 +32,18 @@ For each gaze:
 
 Clicking a selected button again un-selects it. **Clear gaze** (right of Notes) removes all codes and the note from the gaze; until you move on, the same button reads **Undo clear** and puts them back.
 
+### Scan ahead with Space (fastest, needs Sync Pupil)
+Watch the gazes ahead in Pupil and cut them into chunks that get the same codes:
+1. On the first uncoded gaze, press **Space**. Pupil shows it and the gazes after it, one by one (the *s/gaze* box at the bottom sets the speed, 1 second by default). The list shades the gazes shown so far, and the top reads *▶ Scanning 100–103*.
+2. When the look changes (say on 106), press **Space** again. The gazes before it, 100–105, are selected as one chunk. The gaze on screen is left out because it starts the next chunk.
+   - Pressed a moment late? **Shift+A** drops the last gaze from the chunk, **Shift+D** adds the next one. Pupil shows the new last gaze so you can check.
+   - A scan also stops by itself before a gaze that's already coded and at the end of a prompt. Then every gaze it showed is selected.
+   - Pressing Space twice quickly selects just the one gaze, for coding gaze by gaze.
+3. Pick the tags (L1, plus L2 for device tags). As soon as every gaze in the chunk is complete, the app moves to the gaze after it, ready for the next Space. The chunk's L3 is carried over from the gaze before it, as when you move gaze by gaze.
+4. **Esc** (or *Cancel*) stops a scan without selecting anything. Clicking a tag, the list or Prev/Next also stops it.
+
 ### Coding several gazes at once
-When a run of gazes all get the same codes:
+When a run of gazes all get the same codes (or use *Scan ahead* above):
 1. In the gaze list on the left, **drag** from the first gaze to the last, or click the first and **Shift+click** the last. The selected gazes are highlighted, and the card reads, e.g., *8 selected · Prompt 1 · 102–109*.
 2. Pick L1, then L2 for device tags, L3 and/or Unsure, or type a note. Each choice goes onto **all** selected gazes.
    - If the selected gazes already have different codes, the card says *Mixed in this selection*; picking a tag sets it on all of them.
@@ -42,7 +52,7 @@ When a run of gazes all get the same codes:
 3. **Undo** (or Ctrl/Cmd+Z) reverts the last change to the selection.
 4. **Done** (or **Esc**) ends the selection and moves to the gaze after it. Clicking any single gaze in the list also ends it.
 
-**The selection plays in Pupil by itself** (needs Sync Pupil, see below): as soon as you finish dragging or Shift+clicking, Pupil shows each selected gaze in turn, every 1 second by default. Change the seconds in the box at the top (0.3 to 10). The gaze on screen gets a blue bar in the list, and the top reads *▶ Playing 102*. **Space** pauses and resumes, or plays the range again once it has finished. Playback stops at the end of the range, on **Esc**, when you pick a tag, or if Pupil can't find a fixation. The selection stays, so you can code the whole range straight after watching it.
+**The selection plays in Pupil by itself** (needs Sync Pupil, see below): as soon as you finish dragging or Shift+clicking, Pupil shows each selected gaze in turn, every 1 second by default. Change the seconds in the *s/gaze* box at the bottom (0.3 to 10). The gaze on screen gets a blue bar in the list, and the top reads *▶ Playing 102*. **Space** pauses and resumes, or plays the range again once it has finished. Playback stops at the end of the range, on **Esc**, when you pick a tag, or if Pupil can't find a fixation. The selection stays, so you can code the whole range straight after watching it.
 
 A gaze counts as **complete** (green dot) when it has L1, plus L2 if L1 is a device. A gaze flagged **Unsure** also counts as complete, so it's included in the progress bar and skipped by Next incomplete, but it's shown in **blue** (blue dot and *unsure* label) so unsure items stand out. A yellow dot means started but incomplete. A grey dot means not started. A `?` in the list marks gazes flagged Unsure.
 
