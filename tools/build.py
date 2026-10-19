@@ -37,6 +37,7 @@ def bake_dictionary(page: str, d: dict) -> str:
     """Replace the app's example dictionary block with the lab's private dictionary."""
     if not DICT_BLOCK.search(page):
         sys.exit('build: built-in dictionary markers not found in gaze_annotator.html')
+    d = dict(d, lockDictionary=True)   # raters of a lab build can't switch or load another dictionary
     lit = json.dumps(d, ensure_ascii=False, indent=2).replace('</', '<\\/')   # safe inside <script>
     block = ('  // <built-in-dictionary>  (lab dictionary, baked in from private/dictionary.json)\n'
              '  const BUILTIN_DICT = ' + lit.replace('\n', '\n  ') + ';\n  // </built-in-dictionary>\n')

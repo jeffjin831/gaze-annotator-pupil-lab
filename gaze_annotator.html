@@ -286,7 +286,7 @@
           <input type="file" id="fileImport" accept=".csv,.xlsx,.xls" class="hidden"></div>
         <div id="importMsg" class="small" style="margin-top:6px"></div>
       </div>
-      <div class="card dict-card">
+      <div class="card dict-card" id="dictCard">
         <details id="dictMore">
           <summary><span class="muted">Tag dictionary:</span> <span id="dictSummary"></span> <span class="link">Change&hellip;</span></summary>
           <div class="row" style="margin-top:8px">
@@ -448,6 +448,9 @@
   S.dictSheets = Object.assign({ [BUILTIN_NAME]: BUILTIN }, S.dictSheets || {});
   S.dictSheets[BUILTIN_NAME] = BUILTIN;
   if (!S.dictSheets[S.dictSheet]) S.dictSheet = BUILTIN_NAME;
+  // a lab build (tools/build.py --lab) has its dictionary built in and offers no way to change it
+  const DICT_LOCKED = !!BUILTIN_DICT.lockDictionary;
+  if (DICT_LOCKED) { S.dictSheets = { [BUILTIN_NAME]: BUILTIN }; S.dictSheet = BUILTIN_NAME; }
 
   function load() {
     try { const t = localStorage.getItem(LS_KEY); return t ? JSON.parse(t) : null; }
@@ -1347,10 +1350,12 @@
     const t = $('toast'); t.textContent = text; t.classList.add('show');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms || 3200);
   }
-  // confetti from an element (a small burst) or from the top of the page (a big one); skipped for
-  // people who asked their computer for reduced motion
+  // confetti from an element (a small burst) or from the top of the page (a big one). Computers set
+  // to reduce motion (e.g. Windows with "Animation effects" off) get a calmer version: fewer pieces,
+  // slower, no spinning.
   function confetti(n, fromEl) {
-    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const calm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (calm) n = Math.ceil(n / 2);
     const cv = document.createElement('canvas'); cv.className = 'confetti';
     const W = innerWidth, H = innerHeight, dpr = window.devicePixelRatio || 1;
     cv.width = W * dpr; cv.height = H * dpr; document.body.appendChild(cv);
@@ -1360,15 +1365,15 @@
     const box = fromEl && fromEl.getBoundingClientRect();
     const ox = box ? box.left + box.width / 2 : W / 2, oy = box ? box.top + box.height / 2 : H * 0.3;
     const parts = Array.from({ length: n }, () => {
-      const a = Math.random() * Math.PI * 2, s = 2 + Math.random() * (box ? 6 : 11);
-      return { x: ox, y: oy, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (box ? 2 : 5), r: Math.random() * 6.3, vr: (Math.random() - 0.5) * 0.35,
+      const a = Math.random() * Math.PI * 2, s = (2 + Math.random() * (box ? 6 : 11)) * (calm ? 0.5 : 1);
+      return { x: ox, y: oy, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (box ? 2 : 5) * (calm ? 0.5 : 1), r: Math.random() * 6.3, vr: calm ? 0 : (Math.random() - 0.5) * 0.35,
                w: 5 + Math.random() * 6, h: 3 + Math.random() * 4, c: colors[(Math.random() * colors.length) | 0] };
     });
     const t0 = performance.now(), life = box ? 1300 : 2600;
     (function frame(now) {
       const t = now - t0; ctx.clearRect(0, 0, W, H); ctx.globalAlpha = Math.max(0, 1 - Math.pow(t / life, 3));
       for (const p of parts) {
-        p.vy += 0.22; p.vx *= 0.985; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        p.vy += calm ? 0.08 : 0.22; p.vx *= 0.985; p.x += p.vx; p.y += p.vy; p.r += p.vr;
         ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
       }
       if (t < life) requestAnimationFrame(frame); else cv.remove();
@@ -1413,6 +1418,7 @@
     pupilHello() { window.postMessage({ source: 'gaze-pupil-ext', type: 'hello' }, '*'); } };
 
   if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) $('keySave').textContent = '⌘ S';
+  $('dictCard').classList.toggle('hidden', DICT_LOCKED);
   renderAll();
   // A fresh opening of the app starts on Setup, where the rater continues the last session or starts a
   // new one. Only a reload of the same tab (e.g. F5 by accident) goes straight back to coding.

@@ -62,7 +62,7 @@ The bar at the top shows how many gazes are complete.
 - **Save** (top right, or **Ctrl+S** / **Cmd+S** on Mac) writes your work into your session file. After the first time there's no dialog; it just saves.
 - The top right shows **Saved 2:14 PM** in green, or **Unsaved changes** in amber. If you try to close the tab with unsaved changes, the browser asks you to confirm.
 - **Need to stop?** Press Save, then close the page.
-- Each Save shows a little burst of confetti and how far along you are, and there's a bigger one when the last gaze is coded. It's just for fun, and it's skipped if your computer is set to reduce motion.
+- Each Save shows a little burst of confetti and how far along you are, and there's a bigger one when the last gaze is coded. It's just for fun. If your computer is set to reduce motion, the confetti is smaller and slower.
 - **Coming back:** the app always opens on the **Setup** page. Under *Resume previous work*:
   - **Continue →** picks up the last session on this computer (the box shows the participant, how many gazes are complete, and when it was last saved).
   - **Open saved session…** opens your session file instead, on this or another computer. Your codes, participant ID, session date and prompts come back, and Save keeps writing into that same file.
@@ -135,7 +135,7 @@ Save first. Then go to *Setup → Resume previous work → Start a new session*,
 
 ## For the study coordinator: the dictionary
 - The public app ships with a small **made-up example dictionary** (the same tags as `examples/example_dictionary.csv`). Replace it with your own in one of two ways:
-  - **Built in (recommended, raters load nothing):** put your dictionary in `private/dictionary.json` (same shape as the `BUILTIN_DICT` block in `gaze_annotator.html`; `private/` is git-ignored) and run `python tools/build.py --lab`. This gives `dist/GazeAnnotator_v<version>_lab.zip` with your tags built in. Hand that package to your raters and never publish it.
+  - **Built in (recommended, raters load nothing):** put your dictionary in `private/dictionary.json` (same shape as the `BUILTIN_DICT` block in `gaze_annotator.html`; `private/` is git-ignored) and run `python tools/build.py --lab`. This gives `dist/GazeAnnotator_v<version>_lab.zip` with your tags built in. In that build the *Tag dictionary* bar on Setup is hidden, so raters always use your tags. Hand that package to your raters and never publish it.
   - **Loaded:** raters load your dictionary workbook (or CSV) once via *Setup → Tag dictionary → Change… → Load an updated workbook*. It's remembered in that browser and can be switched back to the built-in one in the *Dictionary* dropdown.
 - A plain `python tools/build.py` always builds the public package with the example tags, and stops if any definition from `private/dictionary.json` would end up in it.
 - Workbook format: column **A** is the level (`L1_…`, `L2_…`, `L3_…`), **B** is the tag text (exactly what appears on the button and in the export), and **C onward** is the definition and guidance. Other rows are ignored. A loaded workbook uses its last sheet that has `L1_` rows.
