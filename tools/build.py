@@ -23,7 +23,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-VERSION = '1.9'
+VERSION = '2.0'
 ROOT = Path(__file__).resolve().parent.parent
 PAGES = [ROOT / 'gaze_annotator.html', ROOT / 'combine_sessions.html']
 README = ROOT / 'README.md'

@@ -326,7 +326,7 @@
       <div class="foot small muted">
         <label><input type="checkbox" id="autoAdvance"> Auto-advance when a gaze is complete</label>
         <label title="Turn on when coding L3 (e.g. in a second round): progress and Next incomplete then also count gazes missing L3"><input type="checkbox" id="requireL3"> Require L3</label>
-        <label id="syncWrap" class="hidden" title="Moves Pupil Cloud's Manual Mapper to the same fixation as the gaze you are coding (needs the Pupil sync extension and a Pupil Cloud tab with the Manual Mapper open)"><input type="checkbox" id="syncPupil"> Sync Pupil</label>
+        <label id="syncWrap" class="hidden" title="Moves Pupil Cloud's Manual Mapper to the same fixation as the gaze you are coding (needs the Pupil sync extension, connected by clicking its button on the Manual Mapper tab)"><input type="checkbox" id="syncPupil"> Sync Pupil</label>
         <span id="syncState" class="syncstate"></span>
         <button type="button" class="linkbtn" id="btnTip">Sync tips</button>
         <span class="spacer"></span>
@@ -348,8 +348,10 @@
         <li>Type <code>chrome://extensions</code> in Chrome's address bar and switch on <b>Developer mode</b> (top right).</li>
         <li>Click <b>Load unpacked</b> and choose the <code>pupil-sync-extension</code> folder from the package (keep that folder where it is afterwards).</li>
         <li>On the extension's card click <b>Details</b> and switch on <b>Allow access to file URLs</b>.</li>
+        <li>Click the puzzle-piece icon next to the address bar and <b>pin</b> the extension, so its button stays visible.</li>
         <li>Reload this page: a <b>Sync Pupil</b> box appears at the bottom. Tick it.</li>
       </ol></li>
+    <li><b>Connect Pupil Cloud by hand:</b> open the Manual Mapper, then click the extension's button on that tab. A green <b>ON</b> badge means it is connected. The extension can reach only that tab, and only after your click. Click again to disconnect. Reloading or closing the tab also disconnects it.</li>
     <li><b>Put Pupil Cloud and this app side by side:</b> right-click the Pupil Cloud tab, choose the split view option
       (for example <i>Add tab to new split view</i>), then pick this app's tab. You see the video and the tags together, and Pupil follows the gaze you are coding.</li>
     <li><b>Click on this app's side before using the keys</b> (A, D, B, U, Space): keys go to whichever side you clicked last.</li>
